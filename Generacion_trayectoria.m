@@ -62,6 +62,8 @@ carpeta = 'D:\Universidad\4º_Año_de_verdad\TFG\Datasets con datos reales (coch
 listaArchivos = dir(fullfile(carpeta, '*.txt'));
 numArchivos = length(listaArchivos);
 
+t_archivos=1:numArchivos; %obtenemos un vector no exactamente del tiempo pero bueno
+
 % 2. Preparamos los contenedores
 copias_texto = cell(1, numArchivos); % Para guardar el texto bruto
 roll = zeros(1, numArchivos);
@@ -85,6 +87,9 @@ for i = 1:numArchivos
     yaw(i) = datos(1,6);
 end
 
+yaw_continuo = unwrap(yaw); %es para que en la gráfica sea continuo y no haya un cambio brusco de ángulos
+                            %ya que el sensor tiene un rango de -pi a pi
+
 % 4. Ejemplo de cómo ver los datos:
 % Si quieres ver el texto del tercer archivo, escribe en el Command Window:
 % disp(copias_texto{3})
@@ -92,7 +97,7 @@ end
 %Con los datos de la orientación vamos a graficarlos
 
 figure(2)
-plot(t_archivos,yaw,'-');
+plot(t_archivos,yaw_continuo,'r');
 hold on
 plot(t_archivos,roll,'r');
 hold on
@@ -119,4 +124,12 @@ legend('Yaw','roll','pitch');
 %forma discreta. Ya que no podemos integrar funciones continuas pues no las
 %tenemos para empezar. El mundo por no decir nunca, se comporta de forma
 %continua. 
+
+%% Obtención de trayectoria con datos inerciales
+%En este apartado  me gustaría conseguir la trayectoria del coche mediante
+%los datos proporcionados por la IMU y así poder compararlos con la
+%trayectoria casi real del GPS. 
+
+%A continuación haremos lo siguiente: 
+
 
