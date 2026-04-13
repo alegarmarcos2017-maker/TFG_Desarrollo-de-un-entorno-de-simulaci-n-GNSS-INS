@@ -1,3 +1,8 @@
+%% Anuncio importante acerca de github
+%Cuando nosotros abrimos el documento dentro del repositorio se abrirá un
+%nuevo archivo igual, el cuál si es que modificas se modifica github.
+
+
 %% Vamos a obtener una trayectoria con datos reales 
 %A partir de los datos reales de datasets públicos proporcionados por KITTI
 
@@ -125,11 +130,122 @@ legend('Yaw','roll','pitch');
 %tenemos para empezar. El mundo por no decir nunca, se comporta de forma
 %continua. 
 
-%% Obtención de trayectoria con datos inerciales
-%En este apartado  me gustaría conseguir la trayectoria del coche mediante
-%los datos proporcionados por la IMU y así poder compararlos con la
-%trayectoria casi real del GPS. 
+%% Obtenemos datos de actitud y representamos (2)
 
-%A continuación haremos lo siguiente: 
+% En el apartado anterior tuvimos la suerte de que dentro de los datos
+% proporcionados por la IMU ya nos daba directamente, sin tener que
+% nosotros integrar ni nada. Lo ideal sería integrar y comprobar que
+% efectivamente coincide con los datos de yaw, roll y pitch que nos
+% proporcionaba. De esta forma veremos que concuerdan nuestros datos
+% integrados y funciona bien nuestro código. 
 
+%De igual forma que en apartados anteriores almacenaremos los valores de
+%las velocidades angulares de cada eje en 3 vectores
+
+roll_int = zeros(1, numArchivos);
+pitch_int = zeros(1, numArchivos);
+yaw_int = zeros(1, numArchivos);
+
+% 3. El bucle para procesar y copiar
+for i = 1:numArchivos
+    nombreActual = listaArchivos(i).name;
+    rutaCompleta = fullfile(carpeta, nombreActual);
+    
+    % --- NUEVA LÍNEA: Guardamos una copia del texto original ---
+    % fileread lee el archivo completo como una cadena de texto (string)
+    copias_texto{i} = fileread(rutaCompleta); 
+    
+    % --- Tu lógica actual para extraer datos numéricos ---
+    datos = readmatrix(rutaCompleta);
+    
+    roll_int(i) = datos(1,18); 
+    pitch_int(i) = datos(1,19);
+    yaw_int(i) = datos(1,20);
+end
+
+%Además sabemos que la frecuencia de muestreo es de 10 Hz, por lo que el
+%tiempo o periodo de muestreo que se toma cada dato de la IMU es la
+%inversa de la frecuencia; 
+
+freq=10; %Hz
+t_muestreo= 1/freq;
+dt=t_muestreo;
+n = 803;            % Número de muestras
+t = (0:n-1) * dt;   % Crea: 0, 0.1, 0.2, 0.3... hasta 80.2 este será nuestro
+                    %vector tiempo real
+
+% 4. Integrar los datos de actitud para obtener la orientación acumulada
+% Cuando usas cumtrapz, MATLAB calcula el área de un pequeño trapecio entre
+% cada dos muestras de datos. En sí es la fórmula del área
+
+yaw_acumulado = cumtrapz(t, yaw_int);
+roll_acumulado = cumtrapz(t, roll_int);
+pitch_acumulado = cumtrapz(t, pitch_int);
+
+%Vamos a representarlo 
+
+figure(3)
+plot(t,pitch_acumulado,'r');
+hold on
+plot(t,roll_acumulado,'g');
+hold on 
+plot(t, yaw_acumulado,'y');
+ylabel('Orientación (rad)'); xlabel('Tiempo_archivos');
+legend('Pitch','roll','Yaw');
+
+%Observamos que las curvas son prácticamente idénticas, solo que en la que
+%nosotros hemos integrado la curva está desplazada. Esto se debe a que
+%nosotros hemos empezado a integrar sin inicializar, es decir no le "hemos 
+% dicho" a la IMU donde estaba en un inicio. 
+
+% En términos matemáticos, cuando haces una integral indefinida (que es
+% básicamente lo que hace cumtrapz desde el primer elemento), el resultado 
+% es una integral más una constante. Esa constante es el valor inicial (la 
+% orientación original del avión). Como cumtrapz siempre empieza en 0, si 
+% tu avión ya estaba inclinado 10 grados al empezar el experimento, tu curva
+% integrada y la del sensor estarán desplazadas exactamente esos 10 grados
+% durante todo el trayecto. 
+
+%Con este problema lo que vemos es la necesidad de alineación de nuestro
+%sensor. 
+
+%El sensor mediante el magnetómetro lo que ha conseguido es obtener el
+%primer dato de orientación. Nosotros lo que haremos será usarlo como
+%constante de integración, y de esta forma estarán las curvas igual de
+%calibradas. 
+
+% Inicializamos la constante de integración con el primer valor de yaw
+yaw_offset = yaw(1); %yaw(1) es el primer elemento que nos da directamente
+                     %el sensor, es la orientación
+
+%Volvemos a reahacer nuestros vectores 
+yaw_acumulado1 = yaw_acumulado + yaw_offset;
+
+%Ya lo podremos representar
+
+figure(4)
+plot(t,pitch_acumulado,'r');
+hold on
+plot(t,roll_acumulado,'g');
+hold on 
+plot(t, yaw_acumulado1,'y');
+ylabel('Orientación (rad)'); xlabel('Tiempo_archivos');
+legend('Pitch','roll','Yaw');
+
+%Ya son prácticamente idénticas, vamos a representarlas juntas en una misma
+%grápica
+
+% Representar las curvas de orientación acumulada juntas
+figure(5)
+plot(t, yaw_acumulado, 'r', t, yaw_acumulado1, 'g', t, yaw_continuo,'b');
+ylabel('Orientación (rad)');
+xlabel('Tiempo_archivos');
+legend('Con integración Sin alineamiento', 'Con integración y con alineamiento', 'Datos proporcionados por la IMU' );
+title('Comparación de Orientaciones Acumuladas');
+grid on;
+
+%Con la gráfica se comprueba que el error anterior era debido a la falta
+%de alineación. Además las curvas integrada y la ya dada por el sensor
+%prácticamente se solapan, aunque luego se observa un error que se va
+%notando con el tiempo
 
