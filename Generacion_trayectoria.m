@@ -190,7 +190,7 @@ hold on
 plot(t,roll_acumulado,'g');
 hold on 
 plot(t, yaw_acumulado,'y');
-ylabel('Orientación (rad)'); xlabel('Tiempo_archivos');
+ylabel('Orientación (rad)'); xlabel('Tiempo');
 legend('Pitch','roll','Yaw');
 
 %Observamos que las curvas son prácticamente idénticas, solo que en la que
@@ -229,7 +229,7 @@ hold on
 plot(t,roll_acumulado,'g');
 hold on 
 plot(t, yaw_acumulado1,'y');
-ylabel('Orientación (rad)'); xlabel('Tiempo_archivos');
+ylabel('Orientación (rad)'); xlabel('Tiempo (s)');
 legend('Pitch','roll','Yaw');
 
 %Ya son prácticamente idénticas, vamos a representarlas juntas en una misma
@@ -239,7 +239,7 @@ legend('Pitch','roll','Yaw');
 figure(5)
 plot(t, yaw_acumulado, 'r', t, yaw_acumulado1, 'g', t, yaw_continuo,'b');
 ylabel('Orientación (rad)');
-xlabel('Tiempo_archivos');
+xlabel('Tiempo');
 legend('Con integración Sin alineamiento', 'Con integración y con alineamiento', 'Datos proporcionados por la IMU' );
 title('Comparación de Orientaciones Acumuladas');
 grid on;
@@ -247,5 +247,193 @@ grid on;
 %Con la gráfica se comprueba que el error anterior era debido a la falta
 %de alineación. Además las curvas integrada y la ya dada por el sensor
 %prácticamente se solapan, aunque luego se observa un error que se va
-%notando con el tiempo
+%notando con el tiempo. Este error tiene pinta de deberse al Drift, que se
+%va acumulando con el tiempo.
 
+%Ese distanciamiento que ves es la prueba real de que tu integración es 
+%correcta, pero tus datos tienen "imperfecciones". Lo que estás observando
+%es exactamente lo que justifica por qué necesitamos algoritmos complejos
+%(como el Filtro de Kalman) en lugar de una simple integración.
+
+%% Obtención de la trayectoria
+
+%Una vez obtenidos los datos de la actitud, ya sabemos la orientación que
+%el vehículo obtiene en cada instante de muestreo. Es esencial para poder
+%calcular correctamente las aceleraciones. 
+
+%Además muy importante recalcar que como primera aproximación 
+%no tendremos la gravedad en cuenta, ya que el pitch y roll son 
+% aproximadamente 0, y asumiremos que solo hay
+%giro en el plano horizontal. 
+
+%Se asume una hipótesis de plano horizontal (Pitch y Roll nulos), por lo
+%que la aceleración medida en el eje longitudinal del vehículo se proyecta 
+%directamente sobre el plano de navegación mediante la matriz de rotación 
+%de Yaw (ángulo phi). 
+
+% C=[cos(yaw_acumulado1(1)) -sin(yaw_acumulado1(1)) 0;
+%     sin(yaw_acumulado1(1)) cos(yaw_acumulado1(1)) 0; ...
+%     0 0 1];
+%Podemos usar simplemente la matriz 2x2, pues el eje x no se va a mover
+
+C2=[cos(yaw_acumulado1(1)) -sin(yaw_acumulado1(1)) ;
+    sin(yaw_acumulado1(1)) cos(yaw_acumulado1(1)) ];
+
+%Lo anterior es un ejemplo para el primer elemento de la actitud, sin
+%embargo durante todo el recorrido del vehículo la orientación será
+%diferente, por lo que la aportación a los ejes navegación o globales será
+%diferente. 
+
+%Vamos de nuevo a recoger en vectores la aceleración registrada por los
+%acelerómetros. 
+
+a_x = zeros(1, numArchivos);
+a_y = zeros(1, numArchivos);
+a_z = zeros(1, numArchivos);
+
+v_x = zeros(1, numArchivos);
+v_y = zeros(1, numArchivos);
+
+v_norte=zeros(1, numArchivos);
+v_este=zeros(1, numArchivos);
+
+for i = 1:numArchivos
+    nombreActual = listaArchivos(i).name;
+    rutaCompleta = fullfile(carpeta, nombreActual);
+    
+    % --- NUEVA LÍNEA: Guardamos una copia del texto original ---
+    % fileread lee el archivo completo como una cadena de texto (string)
+    copias_texto{i} = fileread(rutaCompleta); 
+    
+    % --- Tu lógica actual para extraer datos numéricos ---
+    datos = readmatrix(rutaCompleta);
+    
+    a_x(i) = datos(1,12); 
+    a_y(i) = datos(1,13);
+    a_z(i) = datos(1,14);
+
+    v_x(i)=datos(1,9);
+    v_y(i)=datos(1,10);
+
+
+    %Vamos a recopilar también los vectores de la velocidad norte - este
+    
+    v_norte(i)=datos(1,7);
+    v_este(i)=datos(1,8);
+
+    %Vamos a ponerlo en forma de vector
+
+    % Convert acceleration data into a 3D vector
+    acceleration(:, i) = [a_x(i); a_y(i); a_z(i)]; %esto ya me crea una matriz la verdad
+
+end
+
+%Al igual que para el caso de la actitud, en los datos hay datos de la
+%aceleración que parecen también ya haber sido procesados. Lo que haremos
+%será probarlos con la matriz rotación y luego comprobar.
+
+%Se puede hacer de dos formas, mediante bucle for o con vectorización: 
+% Supongamos que yaw está en radianes y tiene N muestras
+% N = length(ax);
+% a_norte = zeros(N, 1);
+% a_este = zeros(N, 1);
+% 
+% for i = 1:N
+%     % 1. Creamos la matriz para el ángulo de ESTE instante
+%     psi = yaw(i);
+%     R = [cos(psi), -sin(psi); 
+%          sin(psi),  cos(psi)];
+% 
+%     % 2. Multiplicamos por el vector de aceleración [ax; ay]
+%     a_body = [ax(i); ay(i)];
+%     a_nav = R * a_body;
+% 
+%     % 3. Guardamos los resultados
+%     a_norte(i) = a_nav(1);
+%     a_este(i) = a_nav(2);
+% end
+
+%% Vía 1: Inercial pura
+%De la aceleración en ejes cuerpo, rotamos e integramos 2 veces, el error
+%debería ser mucho mayor al resto
+
+% Multiplicación directa elemento a elemento
+a_norte = a_x .* cos(yaw_acumulado1) - a_y .* sin(yaw_acumulado1);
+a_este  = a_x .* sin(yaw_acumulado1) + a_y .* cos(yaw_acumulado1);
+
+%Ya tenemos las componentes de la aceleración en el plano de navegación o
+%en el plano global. Ahora integrando obtendríamos la velocidad. La
+%constante de integración la obtenemos de velocidadnorte y este: 
+
+vel_norte = cumtrapz(t, a_norte)+v_norte(1);
+vel_este = cumtrapz(t, a_este)+v_este(1);
+
+% Ahora que tenemos las velocidades en el plano de navegación, podemos
+% calcular la posición integrando las velocidades.
+
+pos_norte = cumtrapz(t, vel_norte);
+pos_este = cumtrapz(t, vel_este);
+
+%A priori no sabemos la constante de integración para la posición, asumimos
+%constante 0
+
+%Ahora representamos: 
+
+figure(6)
+plot(pos_este, pos_norte);
+xlabel('Eje este de navegación (m)'); ylabel('Eje norte de navegación (m)')
+title('Trayectoria mediante aceleración')
+
+%Ciertamente no se parece en nada a la trayectoria generada por el GPS. El
+%error acumulado por la doble integración parece importante
+
+
+%% Vía 2: Odometría
+%Teniendo la velocidad directamente en ejes cuerpo, rotamos e integramos
+
+veloci_norte = v_x .* cos(yaw_acumulado1) - v_y .* sin(yaw_acumulado1);
+veloci_este  = v_x .* sin(yaw_acumulado1) + v_y .* cos(yaw_acumulado1);
+
+% Ahora que tenemos las velocidades en el plano de navegación, podemos
+% calcular la posición integrando las velocidades de odometría.
+
+posi_norte1 = cumtrapz(t, veloci_norte) + v_norte(1);
+posi_este1 = cumtrapz(t, veloci_este) + v_este(1);
+
+%Si representamos lo que debería ocurrir es que no debería haber tanto
+%error como en el caso de la obtención de trayectoria con la aceleración.
+
+figure(7)
+plot(posi_este1,posi_norte1)
+
+
+%% Vía 3: Referencia
+%Donde ya sabemos las componentes de la velocidad en ejes globales, y solo habría
+%que integrar
+
+posi_norte = cumtrapz(t, v_norte)+v_norte(1);
+posi_este = cumtrapz(t, v_este)+v_este(1);
+
+figure(8)
+plot(posi_este, posi_norte);
+xlabel('Eje este de navegación (m)'); ylabel('Eje norte de navegación (m)');
+title(['Trayectoria mediante referencia' ]);
+grid on;
+
+%Este sale vamos, clavado casi
+
+
+% Ahora que tenemos las posiciones calculadas, podemos comparar las trayectorias
+% obtenidas por los diferentes métodos. 
+
+figure(9)
+hold on;
+plot(pos_este, pos_norte, 'r', 'DisplayName', 'Aceleración');
+plot(posi_este1, posi_norte1, 'g', 'DisplayName', 'Odometría');
+plot(posi_este, posi_norte, 'b', 'DisplayName', 'Referencia');
+xlabel('Eje este de navegación (m)');
+ylabel('Eje norte de navegación (m)');
+title('Comparación de Trayectorias');
+legend show;
+grid on;
+hold off;
