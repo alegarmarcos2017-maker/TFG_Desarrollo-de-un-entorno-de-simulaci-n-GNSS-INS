@@ -285,7 +285,8 @@ C2=[cos(yaw_acumulado1(1)) -sin(yaw_acumulado1(1)) ;
 %diferente. 
 
 %Vamos de nuevo a recoger en vectores la aceleración registrada por los
-%acelerómetros. 
+%acelerómetros. Los siguientes datos serán o deberían ser los datos tomados
+%desde ejes cuerpo. 
 
 a_x = zeros(1, numArchivos);
 a_y = zeros(1, numArchivos);
@@ -293,6 +294,9 @@ a_z = zeros(1, numArchivos);
 
 v_x = zeros(1, numArchivos);
 v_y = zeros(1, numArchivos);
+
+%Estos datos son ya la velocidad proyectada en ejes navegación, o
+%este-norte
 
 v_norte=zeros(1, numArchivos);
 v_este=zeros(1, numArchivos);
@@ -363,7 +367,7 @@ a_este  = a_x .* sin(yaw_acumulado1) + a_y .* cos(yaw_acumulado1);
 
 %Ya tenemos las componentes de la aceleración en el plano de navegación o
 %en el plano global. Ahora integrando obtendríamos la velocidad. La
-%constante de integración la obtenemos de velocidadnorte y este: 
+%constante de integración la obtenemos de velocidad norte y este: 
 
 vel_norte = cumtrapz(t, a_norte)+v_norte(1);
 vel_este = cumtrapz(t, a_este)+v_este(1);
@@ -388,31 +392,39 @@ title('Trayectoria mediante aceleración')
 %error acumulado por la doble integración parece importante
 
 
-%% Vía 2: Odometría
+%% Vía 2: Odometría: chequear ángulos hay algo raro
 %Teniendo la velocidad directamente en ejes cuerpo, rotamos e integramos
 
-veloci_norte = v_x .* cos(yaw_acumulado1) - v_y .* sin(yaw_acumulado1);
-veloci_este  = v_x .* sin(yaw_acumulado1) + v_y .* cos(yaw_acumulado1);
+veloci_norte = v_y .* cos(-yaw_acumulado1) - v_x .* sin(yaw_acumulado1);
+veloci_este  = v_y .* sin(-yaw_acumulado1) + v_x .* cos(yaw_acumulado1);
+
 
 % Ahora que tenemos las velocidades en el plano de navegación, podemos
 % calcular la posición integrando las velocidades de odometría.
 
-posi_norte1 = cumtrapz(t, veloci_norte) + v_norte(1);
-posi_este1 = cumtrapz(t, veloci_este) + v_este(1);
+posi_norte1 = cumtrapz(t, -veloci_norte);
+posi_este1 = cumtrapz(t, veloci_este) ; 
+
+%Hemos hecho un poco de trampa: hemos cambiado v_y por v_x y viceversa en
+%la matriz de transformación y cambiado un signo en veloci_norte y da como
+%la trayectoria. No te fies, chequear!!!!!!
 
 %Si representamos lo que debería ocurrir es que no debería haber tanto
 %error como en el caso de la obtención de trayectoria con la aceleración.
 
 figure(7)
-plot(posi_este1,posi_norte1)
+plot(posi_este1,posi_norte1);
+xlabel('Eje este de navegación (m)'); ylabel('Eje norte de navegación (m)')
+title('Trayectoria mediante odometría')
 
+%Me sale la trayectoria tipo invertida
 
 %% Vía 3: Referencia
 %Donde ya sabemos las componentes de la velocidad en ejes globales, y solo habría
 %que integrar
 
-posi_norte = cumtrapz(t, v_norte)+v_norte(1);
-posi_este = cumtrapz(t, v_este)+v_este(1);
+posi_norte = cumtrapz(t, v_norte);
+posi_este = cumtrapz(t, v_este);
 
 figure(8)
 plot(posi_este, posi_norte);
@@ -420,8 +432,9 @@ xlabel('Eje este de navegación (m)'); ylabel('Eje norte de navegación (m)');
 title(['Trayectoria mediante referencia' ]);
 grid on;
 
-%Este sale vamos, clavado casi
+%Este sale representado con la forma casi iagual que la de la señal GPS
 
+%% Representación de todas
 
 % Ahora que tenemos las posiciones calculadas, podemos comparar las trayectorias
 % obtenidas por los diferentes métodos. 
@@ -434,6 +447,11 @@ plot(posi_este, posi_norte, 'b', 'DisplayName', 'Referencia');
 xlabel('Eje este de navegación (m)');
 ylabel('Eje norte de navegación (m)');
 title('Comparación de Trayectorias');
-legend show;
 grid on;
 hold off;
+
+%Se observa una clara desviación completa en el caso de integrar la
+%aceleración 2 veces. 
+%En el caso de integrar solo la velocidad, observamos que al principio las
+%curvas se solapan y coinciden bastante, y se va acumulando error con el
+%tiempo. 
