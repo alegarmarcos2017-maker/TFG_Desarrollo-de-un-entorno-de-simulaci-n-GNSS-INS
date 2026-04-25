@@ -16,24 +16,11 @@
 
 %% vamos a trabajar en otro ordenador a distancia
 %por lo que vamos a clonar el repositorio y a partir de ahora los datasets
-%los guardaremos en un disco duro, de esta forma no hace falta copiar todos
-%los datos en cada ordenador. Para ello:
+%los guardaremos en un disco duro, de esta forma no hace f
 
-% =========================================================================
-% CONFIGURACIÓN DEL ENTORNO (Cambiar según el PC)
-% =========================================================================
-% Aquí va la letra que Windows que le haya asignado a tu disco duro externo hoy
-unidad_disco = 'D:'; 
 
-% La ruta interna dentro de tu disco duro (esta nunca cambia)
-ruta_interna = '\Universidad\4º_Año_de_verdad\TFG\Datasets con datos reales (coche)\Caso 2\2011_09_26\2011_09_26_drive_0036_sync\oxts\data';
-
-% 1. Definimos la carpeta de trabajo uniendo la letra y la ruta
-carpeta = fullfile(unidad_disco, ruta_interna);
-
-% =========================================================================
-% INICIO DEL CÓDIGO DEL TFG
-% =========================================================================
+% 1. Definimos la carpeta de trabajo
+carpeta = 'D:\Universidad\4º_Año_de_verdad\TFG\Datasets con datos reales (coche)\Caso 2\2011_09_26\2011_09_26_drive_0036_sync\oxts\data';
 
 % 2. El comando 'dir' crea una lista (estructura) con todos los .txt
 % '*' es un comodín que significa "cualquier nombre de archivo"
