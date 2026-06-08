@@ -473,3 +473,168 @@ hold off;
 %En el caso de integrar solo la velocidad, observamos que al principio las
 %curvas se solapan y coinciden bastante, y se va acumulando error con el
 %tiempo. 
+
+
+%% =========================================================================
+% VÍA 4: FUSIÓN GNSS-INS MEDIANTE FILTRO DE KALMAN EXTENDIDO (EKF)
+% =========================================================================
+
+% 1. INICIALIZACIÓN DEL EKF
+% Vector de estado inicial: [x_este; y_norte; v_x_local; v_y_local; yaw]
+x_est = [posi_este(1); 
+         posi_norte(1); 
+         v_x(1); 
+         v_y(1); 
+         yaw_acumulado1(1)]; % Usamos el yaw alineado que calculaste tan bien
+
+% Matriz de Covarianza Inicial P (Confianza inicial)
+% Empezamos con mucha confianza en la pose inicial (valores bajos)
+P = diag([0.1, 0.1, 0.1, 0.1, deg2rad(1)]); 
+
+% Matriz de Ruido del Proceso Q (Incertidumbre de tu IMU)
+% Ajustamos cuánto nos fiamos de las integraciones ciegas
+q_pos = 0.05;
+q_vel = 0.1;
+q_yaw = deg2rad(1);
+Q = diag([q_pos, q_pos, q_vel, q_vel, q_yaw]);
+
+% Matriz de Ruido de Medida R (Incertidumbre del GPS y Velocímetro dataset)
+r_gps_pos = 1.5;  % Asumimos un error de 1.5 metros en el GPS
+r_gps_vel = 0.5;  % Asumimos 0.5 m/s de error en la velocidad medida
+R = diag([r_gps_pos, r_gps_pos, r_gps_vel, r_gps_vel]);
+
+% Matriz de Observación H (Relación lineal 1 a 1 con las 4 primeras variables)
+H = [1 0 0 0 0;
+     0 1 0 0 0;
+     0 0 1 0 0;
+     0 0 0 1 0];
+
+I = eye(5); % Matriz identidad auxiliar
+
+% Vectores para guardar la historia del EKF y poder graficar luego
+ekf_pos_este  = zeros(1, numArchivos);
+ekf_pos_norte = zeros(1, numArchivos);
+ekf_yaw       = zeros(1, numArchivos);
+
+% Guardamos el primer punto
+ekf_pos_este(1)  = x_est(1);
+ekf_pos_norte(1) = x_est(2);
+ekf_yaw(1)       = x_est(5);
+
+% 2. BUCLE PRINCIPAL DEL EKF (A 10 Hz)
+for k = 2:numArchivos
+    
+    % --- DATOS DE ENTRADA EN EL INSTANTE k ---
+    % IMU (Inputs u)
+    ax = a_x(k); 
+    ay = a_y(k); 
+    wz = yaw_int(k); % Velocidad angular pura
+    
+    % GPS (Medidas z) -> Usamos tu Vía 3 como si fuera la antena GPS
+    z = [posi_este(k); 
+         posi_norte(k); 
+         v_x(k); 
+         v_y(k)];
+    
+    % Variables auxiliares del estado anterior
+    vx_prev = x_est(3);
+    vy_prev = x_est(4);
+    th_prev = x_est(5);
+    
+    % --- FASE 1: PREDICCIÓN (INS) ---
+    % 1. Ecuaciones cinemáticas puras (Odometría)
+    x_pred = zeros(5,1);
+    x_pred(1) = x_est(1) + (vx_prev * cos(th_prev) - vy_prev * sin(th_prev)) * dt;
+    x_pred(2) = x_est(2) + (vx_prev * sin(th_prev) + vy_prev * cos(th_prev)) * dt;
+    x_pred(3) = vx_prev + ax * dt;
+    x_pred(4) = vy_prev + ay * dt;
+    x_pred(5) = th_prev + wz * dt;
+    
+    % 2. Jacobiano F (Linealización en el punto actual)
+    F = [1, 0,  cos(th_prev)*dt, -sin(th_prev)*dt, (-vx_prev*sin(th_prev) - vy_prev*cos(th_prev))*dt;
+         0, 1,  sin(th_prev)*dt,  cos(th_prev)*dt, ( vx_prev*cos(th_prev) - vy_prev*sin(th_prev))*dt;
+         0, 0,                1,                0,                                                 0;
+         0, 0,                0,                1,                                                 0;
+         0, 0,                0,                0,                                                 1];
+     
+    % 3. Propagación de la covarianza (Incertidumbre crece)
+    P_pred = F * P * F' + Q;
+    
+    % --- FASE 2: CORRECCIÓN (GNSS) ---
+    % 4. Innovación (Lo que mide el GPS vs lo que predecía el INS)
+    y_innov = z - (H * x_pred);
+    
+    % 5. Covarianza de la Innovación y Ganancia de Kalman
+    S = H * P_pred * H' + R;
+    K = P_pred * H' / S;
+    
+    % 6. Actualización final del estado y la covarianza
+    x_est = x_pred + K * y_innov;
+    P = (I - K*H) * P_pred * (I - K*H)' + K * R * K'; % Forma de Joseph
+    
+    % --- GUARDADO DE DATOS ---
+    ekf_pos_este(k)  = x_est(1);
+    ekf_pos_norte(k) = x_est(2);
+    ekf_yaw(k)       = x_est(5);
+end
+
+%% =========================================================================
+% REPRESENTACIÓN 1: COMPARATIVA ESTÁTICA TOTAL (Figura 10)
+% =========================================================================
+figure(10);
+clf; % Limpiamos la figura por si se había quedado pillada
+hold on;
+% 1. Vía 2: Odometría Pura
+plot(posi_este1, posi_norte1, 'g--', 'LineWidth', 1.5, 'DisplayName', 'Vía 2: Odometría');
+% 2. Vía 3: Referencia GPS (con los puntos más grandes como pediste)
+plot(posi_este, posi_norte, 'b.', 'MarkerSize', 15, 'DisplayName', 'Vía 3: Medidas GPS');
+% 3. Vía 4: EKF
+plot(ekf_pos_este, ekf_pos_norte, 'r-', 'LineWidth', 2, 'DisplayName', 'Vía 4: EKF (Fusión)');
+
+xlabel('Eje Este (m)');
+ylabel('Eje Norte (m)');
+title('Comparativa de Estimación (Estática)');
+legend('Location', 'best');
+grid on;
+axis equal;
+hold off;
+
+% ¡CLAVE! Forzamos a MATLAB a imprimir esta figura en pantalla antes de seguir
+drawnow; 
+
+%% =========================================================================
+% REPRESENTACIÓN 2: ANIMACIÓN EN TIEMPO REAL (Figura 11)
+% =========================================================================
+figure(11);
+clf; % Lienzo limpio
+hold on;
+grid on;
+axis equal; 
+xlabel('Eje Este (m)');
+ylabel('Eje Norte (m)');
+title('Animación en Tiempo Real GNSS-INS');
+
+% Fijamos la cámara usando la ruta del GPS con un margen
+margen = 20; 
+xlim([min(posi_este)-margen, max(posi_este)+margen]);
+ylim([min(posi_norte)-margen, max(posi_norte)+margen]);
+
+% Creamos las líneas animadas
+linea_odom = animatedline('Color', 'g', 'LineStyle', '--', 'LineWidth', 1.5, 'DisplayName', 'Odometría');
+linea_gps  = animatedline('Color', 'b', 'Marker', '.', 'LineStyle', 'none', 'MarkerSize', 15, 'DisplayName', 'GPS');
+linea_ekf  = animatedline('Color', 'r', 'LineWidth', 2, 'DisplayName', 'EKF');
+
+legend('Location', 'best');
+
+% Bucle de animación (Avanzamos de 5 en 5 para que sea fluido y no tarde horas)
+for k = 1:5:numArchivos
+    
+    addpoints(linea_odom, posi_este1(k), posi_norte1(k));
+    addpoints(linea_gps, posi_este(k), posi_norte(k));
+    addpoints(linea_ekf, ekf_pos_este(k), ekf_pos_norte(k));
+    
+    % Usamos un pause mínimo en lugar de limitrate para máxima compatibilidad
+    drawnow;
+    pause(0.001); 
+end
+hold off;
