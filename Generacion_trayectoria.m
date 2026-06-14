@@ -22,6 +22,7 @@
 % =========================================================================
 % CONFIGURACIÓN DEL ENTORNO (Cambiar según el PC)
 % =========================================================================
+clear; clc; close all;
 % Aquí va la letra que Windows que le haya asignado a tu disco duro externo hoy
 unidad_disco = 'D:'; 
 
@@ -458,6 +459,7 @@ grid on;
 % obtenidas por los diferentes métodos. 
 
 figure(9)
+clf; % <-- ¡AQUÍ ESTÁ LA SOLUCIÓN! Limpia el lienzo de ejecuciones anteriores
 hold on;
 plot(pos_este, pos_norte, 'r', 'DisplayName', 'Aceleración');
 plot(posi_este1, posi_norte1, 'g', 'DisplayName', 'Odometría');
@@ -465,6 +467,7 @@ plot(posi_este, posi_norte, 'b', 'DisplayName', 'Referencia');
 xlabel('Eje este de navegación (m)');
 ylabel('Eje norte de navegación (m)');
 title('Comparación de Trayectorias');
+legend;
 grid on;
 hold off;
 
@@ -485,7 +488,7 @@ x_est = [posi_este(1);
          posi_norte(1); 
          v_x(1); 
          v_y(1); 
-         yaw_acumulado1(1)]; % Usamos el yaw alineado que calculaste tan bien
+         yaw_acumulado1(1)]; 
 
 % Matriz de Covarianza Inicial P (Confianza inicial)
 % Empezamos con mucha confianza en la pose inicial (valores bajos)
@@ -499,8 +502,8 @@ q_yaw = deg2rad(1);
 Q = diag([q_pos, q_pos, q_vel, q_vel, q_yaw]);
 
 % Matriz de Ruido de Medida R (Incertidumbre del GPS y Velocímetro dataset)
-r_gps_pos = 1.5;  % Asumimos un error de 1.5 metros en el GPS
-r_gps_vel = 0.5;  % Asumimos 0.5 m/s de error en la velocidad medida
+r_gps_pos = 5;  % Asumimos un error de 5 metros en el GPS
+r_gps_vel = 1;  % Asumimos 1 m/s de error en la velocidad medida
 R = diag([r_gps_pos, r_gps_pos, r_gps_vel, r_gps_vel]);
 
 % Matriz de Observación H (Relación lineal 1 a 1 con las 4 primeras variables)
@@ -637,4 +640,41 @@ for k = 1:5:numArchivos
     drawnow;
     pause(0.001); 
 end
+hold off;
+
+
+%% =========================================================================
+% ANÁLISIS DE ERRORES: COMPARATIVA DE DERIVAS
+% =========================================================================
+% Calculamos el error de posición (distancia euclídea) en cada instante 'k'
+% Error = sqrt( (x_estimado - x_real)^2 + (y_estimado - y_real)^2 )
+
+% 1. Error de la integración de Aceleración (INS Pura)
+error_accel = sqrt((pos_este - posi_este).^2 + (pos_norte - posi_norte).^2);
+
+% 2. Error de la Odometría
+error_odom = sqrt((posi_este1 - posi_este).^2 + (posi_norte1 - posi_norte).^2);
+
+% 3. Error del Filtro de Kalman Extendido (EKF)
+error_ekf = sqrt((ekf_pos_este - posi_este).^2 + (ekf_pos_norte - posi_norte).^2);
+
+% Representación gráfica del error a lo largo del tiempo
+figure(12)
+clf; % Limpiamos la figura por si acaso
+hold on;
+plot(t, error_accel, 'r', 'LineWidth', 1.5, 'DisplayName', 'Error INS Pura (Aceleración)');
+plot(t, error_odom, 'g', 'LineWidth', 1.5, 'DisplayName', 'Error Odometría');
+plot(t, error_ekf, 'b', 'LineWidth', 2, 'DisplayName', 'Error EKF (Fusión)');
+
+xlabel('Tiempo (s)', 'FontWeight', 'bold');
+ylabel('Error de Posición (m)', 'FontWeight', 'bold');
+title('Evolución del Error de Posición a lo largo de la trayectoria');
+legend('Location', 'northwest');
+grid on;
+
+% Opcional: Hacemos un zoom limitando el eje Y, porque el error de la 
+% aceleración será tan bestia que aplastará a las otras dos líneas y no 
+% nos dejará ver lo bien que va el EKF. Descomenta la siguiente línea 
+% si el error rojo se va a miles de metros:
+% ylim([0, max(error_odom)*1.2]); 
 hold off;
