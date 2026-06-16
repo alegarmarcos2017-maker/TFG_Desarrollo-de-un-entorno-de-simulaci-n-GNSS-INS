@@ -35,6 +35,7 @@ carpeta = fullfile(unidad_disco, ruta_interna);
 % =========================================================================
 % INICIO DEL CÓDIGO DEL TFG
 % =========================================================================
+fprintf('Cargando datos del dataset de Kitti y ruta GPS...\n');
 
 % 2. El comando 'dir' crea una lista (estructura) con todos los .txt
 % '*' es un comodín que significa "cualquier nombre de archivo"
@@ -481,6 +482,7 @@ hold off;
 %% =========================================================================
 % VÍA 4: FUSIÓN GNSS-INS MEDIANTE FILTRO DE KALMAN EXTENDIDO (EKF)
 % =========================================================================
+fprintf('Aplicando EKF...');
 
 % 1. INICIALIZACIÓN DEL EKF
 % Vector de estado inicial: [x_este; y_norte; v_x_local; v_y_local; yaw]
@@ -678,3 +680,476 @@ grid on;
 % si el error rojo se va a miles de metros:
 % ylim([0, max(error_odom)*1.2]); 
 hold off;
+
+%% =========================================================================
+% ANÁLISIS DE ERRORES: VISIÓN GLOBAL Y DETALLE (Subplots)
+% =========================================================================
+figure(13)
+clf; % Limpiamos la figura entera antes de dibujar para que no se solapen cosas
+
+% --- PANEL SUPERIOR: Visión Global (La catástrofe inercial) ---
+subplot(2,1,1);
+hold on;
+plot(t, error_accel, 'r', 'LineWidth', 1.5, 'DisplayName', 'Error INS Pura (Acel.)');
+plot(t, error_odom, 'g', 'LineWidth', 1.5, 'DisplayName', 'Error Odometría');
+plot(t, error_ekf, 'b', 'LineWidth', 2, 'DisplayName', 'Error EKF (Fusión)');
+ylabel('Error Posición (m)', 'FontWeight', 'bold');
+title('Visión Global: Divergencia de la Integración Inercial');
+legend('Location', 'northwest');
+grid on;
+hold off;
+
+% --- PANEL INFERIOR: Detalle de Precisión (El pulso real EKF vs Odom) ---
+subplot(2,1,2);
+hold on;
+% Dibujamos la aceleración aunque se salga por el techo, para mantener la leyenda
+plot(t, error_accel, 'r', 'LineWidth', 1.5, 'DisplayName', 'Error INS Pura (Acel.)'); 
+plot(t, error_odom, 'g', 'LineWidth', 1.5, 'DisplayName', 'Error Odometría');
+plot(t, error_ekf, 'b', 'LineWidth', 2, 'DisplayName', 'Error EKF (Fusión)');
+xlabel('Tiempo (s)', 'FontWeight', 'bold');
+ylabel('Error Posición (m)', 'FontWeight', 'bold');
+title('Detalle de Precisión Acotada: Odometría vs. Filtro de Kalman');
+
+% ¡Aquí está la magia del zoom acotando el eje Y!
+ylim([0, 50]); 
+
+legend('Location', 'northwest');
+grid on;
+hold off;
+
+%% =========================================================================
+% CASO DE ESTUDIO 2: EKF 8 ESTADOS (ESTIMACIÓN DE BIAS DE INSTRUMENTACIÓN)
+% =========================================================================
+
+% 1. INICIALIZACIÓN DEL EKF (CASO 2)
+% Vector de estado inicial: [x_este; y_norte; v_x_local; v_y_local; yaw; b_ax; b_ay; b_gz]
+x_est_c2 = [posi_este(1); 
+            posi_norte(1); 
+            v_x(1); 
+            v_y(1); 
+            yaw_acumulado1(1);
+            0; % Bias inicial del acelerómetro en X asumido nulo
+            0; % Bias inicial del acelerómetro en Y asumido nulo
+            0];% Bias inicial del giróscopo en Z asumido nulo
+
+% Matriz de Covarianza Inicial P (Confianza inicial)
+% Damos más incertidumbre a los biases porque no sabemos cómo vienen de fábrica
+P_c2 = diag([0.1, 0.1, 0.1, 0.1, deg2rad(1), 0.5, 0.5, deg2rad(1)]); 
+
+% Matriz de Ruido del Proceso Q
+q_pos = 0.05;
+q_vel = 0.1;
+q_yaw = deg2rad(1);
+q_ba = 0.001;  % Ruido Random Walk para inestabilidad del acelerómetro
+q_bw = 0.0001; % Ruido Random Walk para inestabilidad del giróscopo
+Q_c2 = diag([q_pos, q_pos, q_vel, q_vel, q_yaw, q_ba, q_ba, q_bw]);
+
+% Matriz de Ruido de Medida R (Mismo ruido GNSS que en el Caso 1)
+r_gps_pos = 5;  
+r_gps_vel = 1;  
+R_c2 = diag([r_gps_pos, r_gps_pos, r_gps_vel, r_gps_vel]);
+
+% Matriz de Observación H (El GPS sigue sin poder medir los biases)
+H_c2 = [eye(4), zeros(4, 4)];
+I_c2 = eye(8);
+
+% Vectores para guardar la historia del Caso 2
+ekf_c2_pos_este  = zeros(1, numArchivos);
+ekf_c2_pos_norte = zeros(1, numArchivos);
+ekf_c2_yaw       = zeros(1, numArchivos);
+ekf_c2_bax       = zeros(1, numArchivos);
+ekf_c2_bay       = zeros(1, numArchivos);
+ekf_c2_bgz       = zeros(1, numArchivos);
+
+% Guardamos el primer punto
+ekf_c2_pos_este(1)  = x_est_c2(1);
+ekf_c2_pos_norte(1) = x_est_c2(2);
+ekf_c2_yaw(1)       = x_est_c2(5);
+
+% 2. BUCLE PRINCIPAL DEL EKF (CASO 2)
+for k = 2:numArchivos
+    
+    % --- DATOS DE ENTRADA ---
+    ax_med = a_x(k); 
+    ay_med = a_y(k); 
+    wz_med = yaw_int(k); 
+    
+    z = [posi_este(k); posi_norte(k); v_x(k); v_y(k)];
+    
+    % Variables auxiliares del estado anterior
+    vx_prev = x_est_c2(3);
+    vy_prev = x_est_c2(4);
+    th_prev = x_est_c2(5);
+    bax_prev= x_est_c2(6);
+    bay_prev= x_est_c2(7);
+    bgz_prev= x_est_c2(8);
+    
+    % --- COMPENSACIÓN INSTRUMENTAL ---
+    ax_c = ax_med - bax_prev;
+    ay_c = ay_med - bay_prev;
+    wz_c = wz_med - bgz_prev;
+    
+    % --- FASE 1: PREDICCIÓN (INS COMPENSADA) ---
+    x_pred_c2 = zeros(8,1);
+    x_pred_c2(1) = x_est_c2(1) + (vx_prev * cos(th_prev) - vy_prev * sin(th_prev)) * dt;
+    x_pred_c2(2) = x_est_c2(2) + (vx_prev * sin(th_prev) + vy_prev * cos(th_prev)) * dt;
+    x_pred_c2(3) = vx_prev + ax_c * dt;
+    x_pred_c2(4) = vy_prev + ay_c * dt;
+    x_pred_c2(5) = th_prev + wz_c * dt;
+    x_pred_c2(6) = bax_prev; % Modelo Random Walk (se asume constante)
+    x_pred_c2(7) = bay_prev;
+    x_pred_c2(8) = bgz_prev;
+    
+    % Jacobiano F de 8x8
+    F_c2 = eye(8);
+    F_c2(1,3) = cos(th_prev)*dt; F_c2(1,4) = -sin(th_prev)*dt;
+    F_c2(2,3) = sin(th_prev)*dt; F_c2(2,4) = cos(th_prev)*dt;
+    F_c2(1,5) = (-vx_prev*sin(th_prev) - vy_prev*cos(th_prev))*dt;
+    F_c2(2,5) = ( vx_prev*cos(th_prev) - vy_prev*sin(th_prev))*dt;
+    F_c2(3,6) = -dt; % Acoplamiento del bias de ax a la velocidad x
+    F_c2(4,7) = -dt; % Acoplamiento del bias de ay a la velocidad y
+    F_c2(5,8) = -dt; % Acoplamiento del bias de wz al yaw
+    
+    P_pred_c2 = F_c2 * P_c2 * F_c2' + Q_c2;
+    
+    % --- FASE 2: CORRECCIÓN (GNSS) ---
+    y_innov_c2 = z - (H_c2 * x_pred_c2);
+    
+    S_c2 = H_c2 * P_pred_c2 * H_c2' + R_c2;
+    K_c2 = P_pred_c2 * H_c2' / S_c2;
+    
+    x_est_c2 = x_pred_c2 + K_c2 * y_innov_c2;
+    P_c2 = (I_c2 - K_c2*H_c2) * P_pred_c2 * (I_c2 - K_c2*H_c2)' + K_c2 * R_c2 * K_c2'; 
+    
+    % --- GUARDADO DE DATOS ---
+    ekf_c2_pos_este(k)  = x_est_c2(1);
+    ekf_c2_pos_norte(k) = x_est_c2(2);
+    ekf_c2_yaw(k)       = x_est_c2(5);
+    ekf_c2_bax(k)       = x_est_c2(6);
+    ekf_c2_bay(k)       = x_est_c2(7);
+    ekf_c2_bgz(k)       = x_est_c2(8);
+end
+
+%% =========================================================================
+% REPRESENTACIÓN Y ANÁLISIS DEL CASO 2
+% =========================================================================
+
+% 1. Cálculo del error del Caso 2
+error_ekf_c2 = sqrt((ekf_c2_pos_este - posi_este).^2 + (ekf_c2_pos_norte - posi_norte).^2);
+
+% 2. Figura 13: Comparativa definitiva de Precisión (Caso 1 vs Caso 2)
+figure(14)
+clf; 
+hold on;
+plot(t, error_ekf, 'r', 'LineWidth', 1.5, 'DisplayName', 'Caso 1: EKF 5 Estados (Sin Bias)');
+plot(t, error_ekf_c2, 'b', 'LineWidth', 2, 'DisplayName', 'Caso 2: EKF 8 Estados (Con Bias)');
+xlabel('Tiempo (s)', 'FontWeight', 'bold');
+ylabel('Error de Posición (m)', 'FontWeight', 'bold');
+title('Reducción del Error Absoluto gracias a la Estimación Instrumental');
+legend('Location', 'best');
+grid on; 
+hold off;
+
+% 3. Figura 14: Evolución Temporal de los Biases (La Autocalibración)
+figure(15)
+clf;
+subplot(2,1,1);
+plot(t, ekf_c2_bax, 'b', 'LineWidth', 1.5, 'DisplayName', 'Sesgo X (b_{ax})'); hold on;
+plot(t, ekf_c2_bay, 'r', 'LineWidth', 1.5, 'DisplayName', 'Sesgo Y (b_{ay})');
+grid on; 
+title('Autocalibración de los Acelerómetros en Tiempo Real');
+xlabel('Tiempo (s)'); ylabel('Aceleración (m/s^2)'); 
+legend('Location', 'best');
+
+subplot(2,1,2);
+plot(t, rad2deg(ekf_c2_bgz), 'Color', [0.4660 0.6740 0.1880], 'LineWidth', 1.5, 'DisplayName', 'Sesgo Z (b_{gz})');
+grid on; 
+title('Autocalibración del Giróscopo en Tiempo Real');
+xlabel('Tiempo (s)'); ylabel('Vel. Angular (deg/s)'); 
+legend('Location', 'best');
+
+
+%% =========================================================================
+%% EXPERIMENTO SECUENCIAL: SIMULACIÓN DE TÚNEL (CORTE GNSS DE t = 40s A 55s)
+%% Bloque 100% independiente para salvaguardar los bucles anteriores
+%% =========================================================================
+
+% --- 1. Inicialización Caso 1 para el Túnel (5 Estados) ---
+x_est_t1 = [posi_este(1); posi_norte(1); v_x(1); v_y(1); yaw_acumulado1(1)]; 
+P_t1 = diag([0.1, 0.1, 0.1, 0.1, deg2rad(1)]); 
+Q_t1 = diag([0.05, 0.05, 0.1, 0.1, deg2rad(1)]);
+R_t1 = diag([5, 5, 1, 1]);
+H_t1 = [1 0 0 0 0; 0 1 0 0 0; 0 0 1 0 0; 0 0 0 1 0];
+I_t1 = eye(5);
+
+ekf_t1_este  = zeros(1, numArchivos);
+ekf_t1_norte = zeros(1, numArchivos);
+ekf_t1_este(1)  = x_est_t1(1);
+ekf_t1_norte(1) = x_est_t1(2);
+
+% --- 2. Inicialización Caso 2 para el Túnel (8 Estados con Bias) ---
+x_est_t2 = [posi_este(1); posi_norte(1); v_x(1); v_y(1); yaw_acumulado1(1); 0; 0; 0];
+P_t2 = diag([0.1, 0.1, 0.1, 0.1, deg2rad(1), 0.5, 0.5, deg2rad(1)]); 
+Q_t2 = diag([0.05, 0.05, 0.1, 0.1, deg2rad(1), 1e-6, 1e-6, 1e-8]);
+R_t2 = diag([5, 5, 1, 1]);
+H_t2 = [eye(4), zeros(4, 4)];
+I_t2 = eye(8);
+
+ekf_t2_este  = zeros(1, numArchivos);
+ekf_t2_norte = zeros(1, numArchivos);
+ekf_t2_este(1)  = x_est_t2(1);
+ekf_t2_norte(1) = x_est_t2(2);
+
+% --- 3. Bucle de Simulación del Escenario de Estrés ---
+for k = 2:numArchivos
+    
+    t_actual = t(k); % Tiempo en el instante actual
+    
+    % Captura de medidas de los sensores cargados en memoria
+    ax_med = a_x(k); 
+    ay_med = a_y(k); 
+    wz_med = yaw_int(k); 
+    z = [posi_este(k); posi_norte(k); v_x(k); v_y(k)];
+    
+    %% --- SUB-PROCESAMIENTO: CASO 1 EN TÚNEL ---
+    vx_p1 = x_est_t1(3); vy_p1 = x_est_t1(4); th_p1 = x_est_t1(5);
+    x_pred_1 = zeros(5,1);
+    x_pred_1(1) = x_est_t1(1) + (vx_p1 * cos(th_p1) - vy_p1 * sin(th_p1)) * dt;
+    x_pred_1(2) = x_est_t1(2) + (vx_p1 * sin(th_p1) + vy_p1 * cos(th_p1)) * dt;
+    x_pred_1(3) = vx_p1 + ax_med * dt;
+    x_pred_1(4) = vy_p1 + ay_med * dt;
+    x_pred_1(5) = th_p1 + wz_med * dt;
+    
+    F_1 = [1, 0,  cos(th_p1)*dt, -sin(th_p1)*dt, (-vx_p1*sin(th_p1) - vy_p1*cos(th_p1))*dt;
+           0, 1,  sin(th_p1)*dt,  cos(th_p1)*dt, ( vx_p1*cos(th_p1) - vy_p1*sin(th_p1))*dt;
+           0, 0,                1,                0,                                                 0;
+           0, 0,                0,                1,                                                 0;
+           0, 0,                0,                0,                                                 1];
+    P_pred_1 = F_1 * P_t1 * F_1' + Q_t1;
+    
+    % ¿Estamos dentro del túnel?
+    if t_actual >= 40 && t_actual <= 55
+        x_est_t1 = x_pred_1; % Navegación inercial pura a ciegas
+        P_t1 = P_pred_1;
+    else
+        % Fuera del túnel: actualización normal
+        y_inv1 = z - H_t1 * x_pred_1;
+        S_1 = H_t1 * P_pred_1 * H_t1' + R_t1;
+        K_1 = P_pred_1 * H_t1' / S_1;
+        x_est_t1 = x_pred_1 + K_1 * y_inv1;
+        P_t1 = (I_t1 - K_1*H_t1) * P_pred_1 * (I_t1 - K_1*H_t1)' + K_1 * R_t1 * K_1';
+    end
+    ekf_t1_este(k)  = x_est_t1(1);
+    ekf_t1_norte(k) = x_est_t1(2);
+    
+    %% --- SUB-PROCESAMIENTO: CASO 2 EN TÚNEL ---
+    vx_p2 = x_est_t2(3); vy_p2 = x_est_t2(4); th_p2 = x_est_t2(5);
+    bax_p2 = x_est_t2(6); bay_p2 = x_est_t2(7); bgz_p2 = x_est_t2(8);
+    
+    % Limpieza inercial con el sesgo acumulado hasta este milisegundo
+    ax_c = ax_med - bax_p2;
+    ay_c = ay_med - bay_p2;
+    wz_c = wz_med - bgz_p2;
+    
+    x_pred_2 = zeros(8,1);
+    x_pred_2(1) = x_est_t2(1) + (vx_p2 * cos(th_p2) - vy_p2 * sin(th_p2)) * dt;
+    x_pred_2(2) = x_est_t2(2) + (vx_p2 * sin(th_p2) + vy_p2 * cos(th_p2)) * dt;
+    x_pred_2(3) = vx_p2 + ax_c * dt;
+    x_pred_2(4) = vy_p2 + ay_c * dt;
+    x_pred_2(5) = th_p2 + wz_c * dt;
+    x_pred_2(6) = bax_p2;
+    x_pred_2(7) = bay_p2;
+    x_pred_2(8) = bgz_p2;
+    
+    F_2 = eye(8);
+    F_2(1,3) = cos(th_p2)*dt; F_2(1,4) = -sin(th_p2)*dt;
+    F_2(2,3) = sin(th_p2)*dt; F_2(2,4) = cos(th_p2)*dt;
+    F_2(1,5) = (-vx_p2*sin(th_p2) - vy_p2*cos(th_p2))*dt;
+    F_2(2,5) = ( vx_p2*cos(th_p2) - vy_p2*sin(th_p2))*dt;
+    F_2(3,6) = -dt; F_2(4,7) = -dt; F_2(5,8) = -dt;
+    
+    P_pred_2 = F_2 * P_t2 * F_2' + Q_t2;
+    
+    % ¿Estamos dentro del túnel?
+    if t_actual >= 40 && t_actual <= 55
+        x_est_t2 = x_pred_2; % Navegación inercial calibrada a ciegas
+        P_t2 = P_pred_2;
+    else
+        % Fuera del túnel: actualización normal
+        y_inv2 = z - H_t2 * x_pred_2;
+        S_2 = H_t2 * P_pred_2 * H_t2' + R_t2;
+        K_2 = P_pred_2 * H_t2' / S_2;
+        x_est_t2 = x_pred_2 + K_2 * y_inv2;
+        P_t2 = (I_t2 - K_2*H_t2) * P_pred_2 * (I_t2 - K_2*H_t2)' + K_2 * R_t2 * K_2';
+    end
+    ekf_t2_este(k)  = x_est_t2(1);
+    ekf_t2_norte(k) = x_est_t2(2);
+end
+
+% --- 4. Cálculo de los nuevos errores bajo el efecto del Túnel ---
+error_tunnel_c1 = sqrt((ekf_t1_este - posi_este).^2 + (ekf_t1_norte - posi_norte).^2);
+error_tunnel_c2 = sqrt((ekf_t2_este - posi_este).^2 + (ekf_t2_norte - posi_norte).^2);
+
+% --- 5. Figura 15: La demostración científica del valor del Bias ---
+figure(15)
+clf;
+hold on;
+plot(t, error_tunnel_c1, 'r', 'LineWidth', 1.5, 'DisplayName', 'Caso 1: Sin Bias (Con corte GNSS)');
+plot(t, error_tunnel_c2, 'b', 'LineWidth', 2, 'DisplayName', 'Caso 2: Con Bias (Con corte GNSS)');
+
+% Sombreado elegante para marcar el túnel en la gráfica
+ax_now = gca;
+y_limits = [0, max(error_tunnel_c1)*1.1];
+ylim(y_limits);
+patch([40 55 55 40], [y_limits(1) y_limits(1) y_limits(2) y_limits(2)], [0.9 0.9 0.9], ...
+      'EdgeColor', 'none', 'FaceAlpha', 0.5, 'HandleVisibility', 'off');
+text(42.5, y_limits(2)*0.85, 'ZONA DE TÚNEL', 'FontWeight', 'bold', 'Color', [0.4 0.4 0.4]);
+
+xlabel('Tiempo (s)', 'FontWeight', 'bold');
+ylabel('Error de Posición (m)', 'FontWeight', 'bold');
+title('Estudio de Resiliencia: Error de Posición con Corte de Señal GNSS (t = 40s a 55s)');
+legend('Location', 'northwest');
+grid on;
+hold off;
+
+
+%% =========================================================================
+% ANÁLISIS MULTIRATE: EKF 100Hz (INS) vs 1Hz (GNSS) + ANTIALIASING MANUAL
+% =========================================================================
+
+% 1. INTERPOLACIÓN DE ALTA RESOLUCIÓN
+factor_interp = 10; 
+t_fino = linspace(t(1), t(end), length(t) * factor_interp);
+dt_fino = t_fino(2) - t_fino(1);
+
+% Interpolamos las señales originales a la nueva frecuencia
+ax_fino = interp1(t, a_x, t_fino, 'linear');
+ay_fino = interp1(t, a_y, t_fino, 'linear');
+wz_fino = interp1(t, yaw_int, t_fino, 'linear');
+
+% 2. FILTRO PASO BAJO (Implementación manual, sin Toolbox)
+% Filtro media móvil simple (es el antialiasing más robusto y universal)
+ventana = 5; % Ventana de suavizado
+ax_fino = movmean(ax_fino, ventana);
+ay_fino = movmean(ay_fino, ventana);
+wz_fino = movmean(wz_fino, ventana);
+
+% 3. INICIALIZACIÓN DE ESTADOS
+% Caso 1: 5 Estados | Caso 2: 8 Estados
+x1 = [posi_este(1); posi_norte(1); v_x(1); v_y(1); yaw_acumulado1(1)];
+x2 = [posi_este(1); posi_norte(1); v_x(1); v_y(1); yaw_acumulado1(1); 0; 0; 0];
+
+P1 = eye(5) * 0.1; 
+P2 = eye(8) * 0.1;
+R = diag([5, 5, 1, 1]); % Ruido GNSS
+Q1 = diag([0.05, 0.05, 0.1, 0.1, deg2rad(1)]);
+Q2 = diag([0.05, 0.05, 0.1, 0.1, deg2rad(1), 1e-6, 1e-6, 1e-8]);
+
+res_x1 = zeros(2, length(t_fino));
+res_x2 = zeros(2, length(t_fino));
+
+% 4. BUCLE MULTIRASA
+for k = 1:length(t_fino)
+    % A) PREDICCIÓN (INS a 100Hz)
+    % Usamos ecuaciones cinemáticas con dt_fino y los valores interpolados
+    vx1 = x1(3); vy1 = x1(4); th1 = x1(5);
+    x1(1:2) = x1(1:2) + [cos(th1) -sin(th1); sin(th1) cos(th1)] * [vx1; vy1] * dt_fino;
+    x1(3:4) = x1(3:4) + [ax_fino(k); ay_fino(k)] * dt_fino;
+    x1(5)   = x1(5)   + wz_fino(k) * dt_fino;
+
+    % Caso 2 (con compensación de bias)
+    vx2 = x2(3); vy2 = x2(4); th2 = x2(5);
+    x2(1:2) = x2(1:2) + [cos(th2) -sin(th2); sin(th2) cos(th2)] * [vx2; vy2] * dt_fino;
+    x2(3:4) = x2(3:4) + [ax_fino(k)-x2(6); ay_fino(k)-x2(7)] * dt_fino;
+    x2(5)   = x2(5)   + (wz_fino(k)-x2(8)) * dt_fino;
+
+    % B) CORRECCIÓN (Solo cada 10 pasos = 1Hz GNSS)
+    if mod(k, factor_interp) == 0
+        idx_gps = round(k / factor_interp);
+        z = [posi_este(idx_gps); posi_norte(idx_gps); v_x(idx_gps); v_y(idx_gps)];
+
+        % Corrección simplificada Caso 1
+        H1 = [eye(4), zeros(4,1)];
+        K1 = P1 * H1' / (H1 * P1 * H1' + R);
+        x1 = x1 + K1 * (z - H1*x1);
+
+        % Corrección simplificada Caso 2
+        H2 = [eye(4), zeros(4,4)];
+        K2 = P2 * H2' / (H2 * P2 * H2' + R);
+        x2 = x2 + K2 * (z - H2*x2);
+    end
+
+    res_x1(:,k) = x1(1:2);
+    res_x2(:,k) = x2(1:2);
+end
+
+% 5. FIGURA COMPARATIVA FINAL
+figure(17); clf;
+err1 = sqrt((res_x1(1,:)-interp1(t,posi_este,t_fino)).^2 + (res_x1(2,:)-interp1(t,posi_norte,t_fino)).^2);
+err2 = sqrt((res_x2(1,:)-interp1(t,posi_este,t_fino)).^2 + (res_x2(2,:)-interp1(t,posi_norte,t_fino)).^2);
+plot(t_fino, err1, 'ro', 'LineWidth', 1.5); hold on;
+plot(t_fino, err2, 'b', 'LineWidth', 1.5);
+title('Análisis Multirasa con Antialiasing Manual');
+legend('Caso 1 (5 estados)', 'Caso 2 (8 estados con Bias)');
+xlabel('Tiempo (s)'); ylabel('Error (m)'); grid on;
+
+%% =========================================================================
+%% FIGURA 18: Errores para EKF síncrono y EKF asíncrono
+%% =========================================================================
+% =========================================================================
+% 6. COMPARATIVA FINAL: EKF SÍNCRONO (10 Hz) vs EKF ASÍNCRONO (1 Hz)
+% =========================================================================
+
+figure(18); clf;
+
+% 1. Ploteamos el caso síncrono (Línea verde gruesa)
+% Sustituye TU_VARIABLE_ERROR_SINCRONO por tu variable real
+plot(t, error_ekf, 'g-', 'LineWidth', 2); hold on;
+
+% 2. Ploteamos el caso asíncrono (Línea discontinua azul del bucle multirate)
+% Usamos t_fino y el err2 que generamos en el bloque anterior
+plot(t_fino, err2, 'b--', 'LineWidth', 1.5);
+
+% Formato académico para la memoria del TFG
+title('Impacto de la Tasa de Actualización GNSS: 10 Hz vs 1 Hz', 'FontSize', 12);
+xlabel('Tiempo (s)', 'FontSize', 11, 'FontWeight', 'bold'); 
+ylabel('Error absoluto de posición (m)', 'FontSize', 11, 'FontWeight', 'bold');
+
+% Leyenda
+legend('EKF Síncrono (Corrección continua a 10 Hz)', ...
+       'EKF Asíncrono (Corrección multirasa a 1 Hz)', 'Location', 'best');
+
+grid on;
+ax = gca;
+ax.GridLineStyle = ':'; 
+ax.GridAlpha = 0.7;
+
+
+
+
+%% =========================================================================
+%% FIGURA 17: VISUALIZACIÓN DE LA FUSIÓN EN EL MAPA (Tracking)
+%% =========================================================================
+figure(19); clf;
+hold on;
+
+% 1. Pintamos el 'Ground Truth' (la referencia GPS real)
+plot(posi_este, posi_norte, 'k.', 'MarkerSize', 8, 'DisplayName', 'Referencia GNSS Real');
+
+% 2. Pintamos la trayectoria estimada por el filtro de 8 estados (Caso 2)
+% Usamos una línea continua para que veas cómo "suaviza" el camino
+plot(res_x2(1,:), res_x2(2,:), 'b-', 'LineWidth', 1.5, 'DisplayName', 'Estimación EKF 8 Estados');
+
+% 3. Pintamos puntos rojos solo en los instantes donde el GPS ha corregido al filtro
+% Esto es el "latido" del filtro: donde la estimación se alinea con la realidad
+idx_correcciones = factor_interp:factor_interp:length(t_fino);
+plot(res_x2(1, idx_correcciones), res_x2(2, idx_correcciones), 'ro', 'MarkerSize', 5, 'DisplayName', 'Instantes de Corrección GNSS');
+
+title('Visualización de la Fusión: Corrección del Filtro en el Plano de Navegación');
+xlabel('Eje Este (m)'); ylabel('Eje Norte (m)');
+legend('Location', 'best');
+grid on; axis equal;
+hold off;
+
+
+%% Hasta aquí ya estaría estudiado el CASO 1 y 2 bidimensional
