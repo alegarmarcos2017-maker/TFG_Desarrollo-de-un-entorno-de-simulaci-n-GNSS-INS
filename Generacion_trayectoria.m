@@ -1,15 +1,15 @@
-%% Anuncio importante acerca de github
-%Cuando nosotros abrimos el documento dentro del repositorio se abrirá un
-%nuevo archivo igual, el cuál si es que modificas se modifica github.
+%% =========================================================================
+% TFG: FUSIÓN GNSS-INS CON EKF PARA TRAYECTORIA DE UN COCHE 
+% CURSO: 2025/2026
+% ALUMNO: ALEJANDRO GARCÍA MARCOS 
+% TUTOR: MIGUEL ÁNGEL GÓMEZ LÓPEZ
+% =========================================================================
 
 
 %% Vamos a obtener una trayectoria con datos reales 
 %A partir de los datos reales de datasets públicos proporcionados por KITTI
-
-%Primero obtendremos los puntos obtenidos del sensor GPS y pintaremos la
-%trayectoria seguida
-
-%Luego obtendremos los datos de actitud mediante los sensores inerciales
+%primero obtendremos los puntos obtenidos del sensor GPS y pintaremos la
+%trayectoria seguida, luego obtendremos los datos de actitud mediante los sensores inerciales
 %aparte
 
 %% En esta primera parte obtenemos los datos GPS y representamos
@@ -19,12 +19,12 @@
 %los guardaremos en un disco duro, de esta forma no hace falta copiar todos
 %los datos en cada ordenador. Para ello:
 
-% =========================================================================
+%% =========================================================================
 % CONFIGURACIÓN DEL ENTORNO (Cambiar según el PC)
 % =========================================================================
 clear; clc; close all;
 
-% Aquí va la letra que Windows que le haya asignado a tu disco duro externo hoy
+% Aquí va la letra que Windows que le haya asignado a tu disco duro externo
 unidad_disco = 'D:'; 
 
 % La ruta interna dentro de tu disco duro (esta nunca cambia)
@@ -33,8 +33,8 @@ ruta_interna = '\Universidad\4º_Año_de_verdad\TFG\Datasets con datos reales (c
 % 1. Definimos la carpeta de trabajo uniendo la letra y la ruta
 carpeta = fullfile(unidad_disco, ruta_interna);
 
-% =========================================================================
-% INICIO DEL CÓDIGO DEL TFG
+%% =========================================================================
+% 1. REPRESENTACIÓN RUTA MEDIANTE DATOS GPS
 % =========================================================================
 fprintf('Cargando datos del dataset de Kitti y ruta GPS...\n');
 
@@ -75,13 +75,17 @@ end
 % 2. Crea la figura de mapa
 figure(1)
 geoplot(lat, lon, 'r-o', 'LineWidth', 2) % 'r-o' es línea roja con círculos
+title('Ruta GPS')
  
 % % 3. Pon un mapa de fondo (puedes usar 'streets', 'satellite', 'topographic')
 geobasemap 'satellite'
 
 %Ya aparecen reflejados los datos en el mapa
 
-%% Obtenemos datos de actitud y representamos
+%% ========================================================================
+% 2. OBTENCIÓN Y REPRESENTACIÓN DE LA ACTITUD
+% =========================================================================
+
 carpeta = 'D:\Universidad\4º_Año_de_verdad\TFG\Datasets con datos reales (coche)\Caso 2\2011_09_26\2011_09_26_drive_0036_sync\oxts\data';
 
 % 1. Listamos los archivos
@@ -130,6 +134,8 @@ hold on
 plot(t_archivos,pitch,'g');
 ylabel('Orientación (rad)'); xlabel('Tiempo');
 legend('Yaw','roll','pitch');
+title('Representación actitud con datos del dron')
+
 
 % De esta gráfica se aprecian los diferentes ángulos u orientaciones en
 % cada archivo de la trayectoria. Se observa qe el más considerable es el
@@ -213,6 +219,7 @@ hold on
 plot(t, yaw_acumulado,'y');
 ylabel('Orientación (rad)'); xlabel('Tiempo');
 legend('Pitch','roll','Yaw');
+title('Representación actitud mediante integración y sin alineamiento')
 
 %Observamos que las curvas son prácticamente idénticas, solo que en la que
 %nosotros hemos integrado la curva está desplazada. Esto se debe a que
@@ -252,6 +259,7 @@ hold on
 plot(t, yaw_acumulado1,'y');
 ylabel('Orientación (rad)'); xlabel('Tiempo (s)');
 legend('Pitch','roll','Yaw');
+title('Representación actitud mediante integración y sin alineamiento')
 
 %Ya son prácticamente idénticas, vamos a representarlas juntas en una misma
 %grápica
@@ -276,7 +284,10 @@ grid on;
 %es exactamente lo que justifica por qué necesitamos algoritmos complejos
 %(como el Filtro de Kalman) en lugar de una simple integración.
 
-%% Obtención de la trayectoria
+%% ========================================================================
+% 3. REPRESENTACIÓN TRAYECTORIA CON DATOS CRUDOS
+% =========================================================================
+
 
 %Una vez obtenidos los datos de la actitud, ya sabemos la orientación que
 %el vehículo obtiene en cada instante de muestreo. Es esencial para poder
@@ -404,10 +415,10 @@ pos_este = cumtrapz(t, vel_este);
 
 %Ahora representamos: 
 
-figure(6)
-plot(pos_este, pos_norte);
-xlabel('Eje este de navegación (m)'); ylabel('Eje norte de navegación (m)')
-title('Trayectoria mediante aceleración')
+% figure(6)
+% plot(pos_este, pos_norte);
+% xlabel('Eje este de navegación (m)'); ylabel('Eje norte de navegación (m)')
+% title('Trayectoria mediante aceleración')
 
 %Ciertamente no se parece en nada a la trayectoria generada por el GPS. El
 %error acumulado por la doble integración parece importante
@@ -433,10 +444,10 @@ posi_este1 = cumtrapz(t, veloci_este) ;
 %Si representamos lo que debería ocurrir es que no debería haber tanto
 %error como en el caso de la obtención de trayectoria con la aceleración.
 
-figure(7)
-plot(posi_este1,posi_norte1);
-xlabel('Eje este de navegación (m)'); ylabel('Eje norte de navegación (m)')
-title('Trayectoria mediante odometría')
+% figure(7)
+% plot(posi_este1,posi_norte1);
+% xlabel('Eje este de navegación (m)'); ylabel('Eje norte de navegación (m)')
+% title('Trayectoria mediante odometría')
 
 %Me sale la trayectoria tipo invertida
 
@@ -447,13 +458,17 @@ title('Trayectoria mediante odometría')
 posi_norte = cumtrapz(t, v_norte);
 posi_este = cumtrapz(t, v_este);
 
-figure(8)
-plot(posi_este, posi_norte);
-xlabel('Eje este de navegación (m)'); ylabel('Eje norte de navegación (m)');
-title(['Trayectoria mediante referencia' ]);
-grid on;
+% figure(8)
+% plot(posi_este, posi_norte);
+% xlabel('Eje este de navegación (m)'); ylabel('Eje norte de navegación (m)');
+% title(['Trayectoria mediante referencia' ]);
+% grid on;
 
 %Este sale representado con la forma casi iagual que la de la señal GPS
+
+%% ========================================================================
+% Se han omitido las gráficas 6, 7 y 8 por no presentar ningún resultado
+% como tal relevante
 
 %% Representación de todas
 
@@ -480,8 +495,10 @@ hold off;
 %tiempo. 
 
 
+
+
 %% =========================================================================
-% VÍA 4: FUSIÓN GNSS-INS MEDIANTE FILTRO DE KALMAN EXTENDIDO (EKF)
+% 4. FUSIÓN GNSS-INS MEDIANTE FILTRO DE KALMAN EXTENDIDO (EKF)
 % =========================================================================
 fprintf('Aplicando EKF...');
 
@@ -585,7 +602,7 @@ for k = 2:numArchivos
 end
 
 %% =========================================================================
-% REPRESENTACIÓN 1: COMPARATIVA ESTÁTICA TOTAL (Figura 10)
+% 5. CASO A: REPRESENTACIÓN DE FUSIÓN CASO SÍNCRONO
 % =========================================================================
 figure(10);
 clf; % Limpiamos la figura por si se había quedado pillada
@@ -608,46 +625,46 @@ hold off;
 % ¡CLAVE! Forzamos a MATLAB a imprimir esta figura en pantalla antes de seguir
 drawnow; 
 
+% %% =========================================================================
+% % REPRESENTACIÓN 2: ANIMACIÓN EN TIEMPO REAL (Figura 11)
+% % =========================================================================
+% figure(11);
+% clf; % Lienzo limpio
+% hold on;
+% grid on;
+% axis equal; 
+% xlabel('Eje Este (m)');
+% ylabel('Eje Norte (m)');
+% title('Animación en Tiempo Real GNSS-INS');
+% 
+% % Fijamos la cámara usando la ruta del GPS con un margen
+% margen = 20; 
+% xlim([min(posi_este)-margen, max(posi_este)+margen]);
+% ylim([min(posi_norte)-margen, max(posi_norte)+margen]);
+% 
+% % Creamos las líneas animadas
+% linea_odom = animatedline('Color', 'g', 'LineStyle', '--', 'LineWidth', 1.5, 'DisplayName', 'Odometría');
+% linea_gps  = animatedline('Color', 'b', 'Marker', '.', 'LineStyle', 'none', 'MarkerSize', 15, 'DisplayName', 'GPS');
+% linea_ekf  = animatedline('Color', 'r', 'LineWidth', 2, 'DisplayName', 'EKF');
+% 
+% legend('Location', 'best');
+% 
+% % Bucle de animación (Avanzamos de 5 en 5 para que sea fluido y no tarde horas)
+% for k = 1:5:numArchivos
+% 
+%     addpoints(linea_odom, posi_este1(k), posi_norte1(k));
+%     addpoints(linea_gps, posi_este(k), posi_norte(k));
+%     addpoints(linea_ekf, ekf_pos_este(k), ekf_pos_norte(k));
+% 
+%     % Usamos un pause mínimo en lugar de limitrate para máxima compatibilidad
+%     drawnow;
+%     pause(0.001); 
+% end
+% hold off;
+
+
 %% =========================================================================
-% REPRESENTACIÓN 2: ANIMACIÓN EN TIEMPO REAL (Figura 11)
-% =========================================================================
-figure(11);
-clf; % Lienzo limpio
-hold on;
-grid on;
-axis equal; 
-xlabel('Eje Este (m)');
-ylabel('Eje Norte (m)');
-title('Animación en Tiempo Real GNSS-INS');
-
-% Fijamos la cámara usando la ruta del GPS con un margen
-margen = 20; 
-xlim([min(posi_este)-margen, max(posi_este)+margen]);
-ylim([min(posi_norte)-margen, max(posi_norte)+margen]);
-
-% Creamos las líneas animadas
-linea_odom = animatedline('Color', 'g', 'LineStyle', '--', 'LineWidth', 1.5, 'DisplayName', 'Odometría');
-linea_gps  = animatedline('Color', 'b', 'Marker', '.', 'LineStyle', 'none', 'MarkerSize', 15, 'DisplayName', 'GPS');
-linea_ekf  = animatedline('Color', 'r', 'LineWidth', 2, 'DisplayName', 'EKF');
-
-legend('Location', 'best');
-
-% Bucle de animación (Avanzamos de 5 en 5 para que sea fluido y no tarde horas)
-for k = 1:5:numArchivos
-    
-    addpoints(linea_odom, posi_este1(k), posi_norte1(k));
-    addpoints(linea_gps, posi_este(k), posi_norte(k));
-    addpoints(linea_ekf, ekf_pos_este(k), ekf_pos_norte(k));
-    
-    % Usamos un pause mínimo en lugar de limitrate para máxima compatibilidad
-    drawnow;
-    pause(0.001); 
-end
-hold off;
-
-
-%% =========================================================================
-% ANÁLISIS DE ERRORES: COMPARATIVA DE DERIVAS
+% 6. ANÁLISIS DE ERRORES: COMPARATIVA DE DERIVAS
 % =========================================================================
 % Calculamos el error de posición (distancia euclídea) en cada instante 'k'
 % Error = sqrt( (x_estimado - x_real)^2 + (y_estimado - y_real)^2 )
@@ -662,18 +679,18 @@ error_odom = sqrt((posi_este1 - posi_este).^2 + (posi_norte1 - posi_norte).^2);
 error_ekf = sqrt((ekf_pos_este - posi_este).^2 + (ekf_pos_norte - posi_norte).^2);
 
 % Representación gráfica del error a lo largo del tiempo
-figure(12)
-clf; % Limpiamos la figura por si acaso
-hold on;
-plot(t, error_accel, 'r', 'LineWidth', 1.5, 'DisplayName', 'Error INS Pura (Aceleración)');
-plot(t, error_odom, 'g', 'LineWidth', 1.5, 'DisplayName', 'Error Odometría');
-plot(t, error_ekf, 'b', 'LineWidth', 2, 'DisplayName', 'Error EKF (Fusión)');
-
-xlabel('Tiempo (s)', 'FontWeight', 'bold');
-ylabel('Error de Posición (m)', 'FontWeight', 'bold');
-title('Evolución del Error de Posición a lo largo de la trayectoria');
-legend('Location', 'northwest');
-grid on;
+% figure(12)
+% clf; % Limpiamos la figura por si acaso
+% hold on;
+% plot(t, error_accel, 'r', 'LineWidth', 1.5, 'DisplayName', 'Error INS Pura (Aceleración)');
+% plot(t, error_odom, 'g', 'LineWidth', 1.5, 'DisplayName', 'Error Odometría');
+% plot(t, error_ekf, 'b', 'LineWidth', 2, 'DisplayName', 'Error EKF (Fusión)');
+% 
+% xlabel('Tiempo (s)', 'FontWeight', 'bold');
+% ylabel('Error de Posición (m)', 'FontWeight', 'bold');
+% title('Evolución del Error de Posición a lo largo de la trayectoria');
+% legend('Location', 'northwest');
+% grid on;
 
 % Opcional: Hacemos un zoom limitando el eje Y, porque el error de la 
 % aceleración será tan bestia que aplastará a las otras dos líneas y no 
@@ -683,7 +700,7 @@ grid on;
 hold off;
 
 %% =========================================================================
-% ANÁLISIS DE ERRORES: VISIÓN GLOBAL Y DETALLE (Subplots)
+% 7. ANÁLISIS DE ERRORES CON FILTRO Y SIN FILTRO  (Subplots)
 % =========================================================================
 figure(13)
 clf; % Limpiamos la figura entera antes de dibujar para que no se solapen cosas
@@ -719,7 +736,7 @@ grid on;
 hold off;
 
 %% =========================================================================
-% CASO DE ESTUDIO 2: EKF 8 ESTADOS (ESTIMACIÓN DE BIAS DE INSTRUMENTACIÓN)
+% 8. CASO B: EKF 8 ESTADOS SÍNCRONO (ESTIMACIÓN DE BIAS DE INSTRUMENTACIÓN) 
 % =========================================================================
 
 % 1. INICIALIZACIÓN DEL EKF (CASO 2)
@@ -832,7 +849,7 @@ for k = 2:numArchivos
 end
 
 %% =========================================================================
-% REPRESENTACIÓN Y ANÁLISIS DEL CASO 2
+% 9.REPRESENTACIÓN Y ANÁLISIS DEL ERROR EN CASO A Y B (CON Y SIN BIAS)
 % =========================================================================
 
 % 1. Cálculo del error del Caso 2
@@ -872,7 +889,7 @@ legend('Location', 'best');
 
 
 %% ========================================================================
-% TFG: EKF DE 8 ESTADOS CON PROPAGACIÓN DE COVARIANZA (IMPLEMENTACIÓN REAL)
+% 10. CASO 2 ASÍNCRONO (CON BIAS)
 % =========================================================================
 clc; % Limpiamos consola
 % OJO: Asegúrate de tener los datos originales cargados en el Workspace
@@ -943,15 +960,9 @@ GT_este = interp1(t, posi_este, t_fino, 'linear');
 GT_norte = interp1(t, posi_norte, t_fino, 'linear');
 err_final = sqrt((res_x2(1,:)-GT_este).^2 + (res_x2(2,:)-GT_norte).^2);
 
-figure(16); clf;
-plot(t_fino, err_final, 'b', 'LineWidth', 1.5);
-title('Error EKF 8-Estados (TFG)');
-xlabel('Tiempo (s)'); ylabel('Error absoluto (m)');
-grid on; set(gca, 'GridLineStyle', ':');
-
 
 %% =========================================================================
-% TFG: DEGRADACIÓN GNSS CON EKF COMPLETO (DATOS A 10 Hz)
+%  11. DEGRADACIÓN GNSS CON EKF COMPLETO (DATOS A 10 Hz)
 % =========================================================================
 clc; %clearvars -except t a_x a_y yaw_int posi_este posi_norte v_x v_y yaw_acumulado1 dt;
 
@@ -1045,7 +1056,7 @@ end
 % 3. REPRESENTACIÓN GRÁFICA DEL ERROR
 err_pos = sqrt((ekf_pos_este(:) - posi_este(:)).^2 + (ekf_pos_norte(:) - posi_norte(:)).^2);
 
-figure(90); hold on;
+figure(16); hold on;
 plot(t(:), err_pos, 'LineWidth', 1.5, 'DisplayName', sprintf('EKF Original - GNSS a %d Hz', frecuencia_gnss));
 
 title('Evolución del Error EKF ante Degradación del GNSS');
@@ -1054,13 +1065,10 @@ ylabel('Error absoluto de posición (m)', 'FontWeight', 'bold');
 legend('Location', 'best'); grid on; set(gca, 'GridLineStyle', ':');
 
 %% =========================================================================
-%% FIGURA 18: Errores para EKF síncrono y EKF asíncrono
-%% =========================================================================
-% =========================================================================
-% 6. COMPARATIVA FINAL: EKF SÍNCRONO (10 Hz) vs EKF ASÍNCRONO (1 Hz)
+% 12. ERRORES EKF SÍNCRONO (10 Hz) vs EKF ASÍNCRONO (1 Hz)
 % =========================================================================
 
-figure(18); clf;
+figure(17); clf;
 
 % 1. Ploteamos el caso síncrono (Línea verde gruesa)
 % Sustituye TU_VARIABLE_ERROR_SINCRONO por tu variable real
@@ -1087,36 +1095,12 @@ ax.GridAlpha = 0.7;
 
 
 
-%% =========================================================================
-%% FIGURA 17: VISUALIZACIÓN DE LA FUSIÓN EN EL MAPA (Tracking)
-%% =========================================================================
-figure(19); clf;
-hold on;
-
-% 1. Pintamos el 'Ground Truth' (la referencia GPS real)
-plot(posi_este, posi_norte, 'k.', 'MarkerSize', 8, 'DisplayName', 'Referencia GNSS Real');
-
-% 2. Pintamos la trayectoria estimada por el filtro de 8 estados (Caso 2)
-% Usamos una línea continua para que veas cómo "suaviza" el camino
-plot(res_x2(1,:), res_x2(2,:), 'b-', 'LineWidth', 1.5, 'DisplayName', 'Estimación EKF 8 Estados');
-
-% 3. Pintamos puntos rojos solo en los instantes donde el GPS ha corregido al filtro
-% Esto es el "latido" del filtro: donde la estimación se alinea con la realidad
-idx_correcciones = factor_interp:factor_interp:length(t_fino);
-plot(res_x2(1, idx_correcciones), res_x2(2, idx_correcciones), 'ro', 'MarkerSize', 5, 'DisplayName', 'Instantes de Corrección GNSS');
-
-title('Visualización de la Fusión: Corrección del Filtro en el Plano de Navegación');
-xlabel('Eje Este (m)'); ylabel('Eje Norte (m)');
-legend('Location', 'best');
-grid on; axis equal;
-hold off;
-
 
 % =========================================================================
-% 4. REPRESENTACIÓN ESPACIAL DE LAS TRAYECTORIAS (Vista en Planta 2D)
+% 13. REPRESENTACIÓN ESPACIAL DE LAS TRAYECTORIAS ASÍNCRONA
 % =========================================================================
 
-figure(20); clf; hold on;
+figure(18); clf; hold on;
 
 % 1. Dibujamos la ruta real del dataset (Ground Truth) en negro sólido
 plot(posi_este, posi_norte, 'k-', 'LineWidth', 2, 'DisplayName', 'Ruta Real (GNSS Original)');
@@ -1145,4 +1129,3 @@ set(gca, 'GridLineStyle', ':');
 % CRÍTICO: Misma escala en ambos ejes para no deformar la realidad física
 axis equal;
 
-%% Hasta aquí ya estaría estudiado el CASO 1 y 2 bidimensional

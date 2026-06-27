@@ -1,14 +1,22 @@
 %% =========================================================================
-% TFG: FUSIÓN GNSS-INS CON EKF (INCLUYE DERIVA INERCIAL PURA)
+% TFG: FUSIÓN GNSS-INS CON EKF PARA TRAYECTORIA DE DRON
+% CURSO: 2025/2026
+% ALUMNO: ALEJANDRO GARCÍA MARCOS 
+% TUTOR: MIGUEL ÁNGEL GÓMEZ LÓPEZ
 % =========================================================================
 clear; clc; close all;
+
+
+%% =========================================================================
+% CONFIGURACIÓN DEL ENTORNO (Cambiar según el PC)
+% =========================================================================
 
 % 1. RUTA DE LOS DATOS
 carpetaData = 'D:\Universidad\4º_Año_de_verdad\TFG\Dataset con datos reales (dron Zúrich)\AGZ\AGZ\Log Files';
 
 
 %% =========================================================================
-% 2. LECTURA Y ALINEACIÓN DE TIEMPOS (T0 = Primer sensor en arrancar)
+% 1. LECTURA Y ALINEACIÓN DE TIEMPOS (T0 = Primer sensor en arrancar)
 % =========================================================================
 fprintf('Cargando datos y sincronizando relojes (Alineamiento por mínimo)...\n');
 opts = {'Delimiter', ',', 'VariableNamingRule', 'preserve'};
@@ -48,7 +56,7 @@ gps_alt = double(tabla_gps.alt);
 gt_x = tabla_gt.x_gt; gt_y = tabla_gt.y_gt; gt_z = tabla_gt.z_gt;
 
 %% =========================================================================
-% 3. TRANSFORMACIÓN "FLAT EARTH"
+% 2. TRANSFORMACIÓN "FLAT EARTH"
 % =========================================================================
 lat0 = gps_lat(1) * pi/180;
 lon0 = gps_lon(1) * pi/180;
@@ -85,7 +93,7 @@ legend('Location', 'best');
 %eje que en otro
 
 %% =========================================================================
-% DIAGNÓSTICO PREVIO: ERROR GNSS POR PLANOS ORTOGONALES
+% 3. DIAGNÓSTICO PREVIO: ERROR GNSS POR PLANOS ORTOGONALES
 % =========================================================================
 fprintf('Generando tríptico 2D de Ground Truth vs GPS...\n');
 
@@ -125,7 +133,7 @@ sgtitle('Descomposición del Error GNSS vs Ground Truth', 'FontWeight', 'bold', 
 fprintf('¡Tríptico GPS generado!\n');
 
 %% =========================================================================
-% DIAGNÓSTICO PREVIO: ERROR EUCLÍDEO DEL GPS VS GROUND TRUTH
+% 4. DIAGNÓSTICO PREVIO: ERROR EUCLÍDEO DEL GPS VS GROUND TRUTH
 % =========================================================================
 fprintf('Calculando el error euclídeo del GPS crudo...\n');
 
@@ -171,7 +179,7 @@ fprintf('RMSE del GPS crudo: %.3f metros\n', rmse_gps);
 fprintf('------------------------------\n\n');
 
 %% =========================================================================
-% EXTRACCIÓN Y REPRESENTACIÓN DE LA ACTITUD DEL PIXHAWK (EULER)
+% 5. EXTRACCIÓN Y REPRESENTACIÓN DE LA ACTITUD DEL PIXHAWK (EULER)
 % =========================================================================
 fprintf('Cargando datos de actitud del Pixhawk...\n');
 
@@ -198,7 +206,7 @@ pitch_pixhawk_deg = rad2deg(angulos_pixhawk_rad(:, 2));
 roll_pixhawk_deg  = rad2deg(angulos_pixhawk_rad(:, 3));
 
 % =========================================================================
-% REPRESENTACIÓN DE LA ACTITUD DEL PIXHAWK (GRÁFICA ÚNICA)
+% 6. REPRESENTACIÓN DE LA ACTITUD DEL PIXHAWK (GRÁFICA ÚNICA)
 % =========================================================================
 fprintf('Generando gráfica combinada de actitud...\n');
 
@@ -228,7 +236,7 @@ fprintf('¡Gráfica combinada generada!\n');
 
 
 %% =========================================================================
-% 5. FILTRO DE KALMAN E INTEGRACIÓN INERCIAL PURA
+% 7.. FILTRO DE KALMAN E INTEGRACIÓN INERCIAL PURA
 % =========================================================================
 fprintf('Calculando trayectoria EKF y Deriva Inercial...\n');
 
@@ -376,7 +384,7 @@ end
 fprintf('¡Filtro de 9 estados asíncrono completado!\n');
 
 %% =========================================================================
-% 5, 6 y 7. ANÁLISIS DE SENSIBILIDAD EKF (TUNING Q Y R)
+% 8. ANÁLISIS DE SENSIBILIDAD EKF (TUNING Q Y R)
 % =========================================================================
 %Lo que ocurría en el bucle
 %anterior es que asumimos que Q tenía mucho ruido y R poco, entonces lo
@@ -512,7 +520,7 @@ for caso = 1:3
 end
 
 % =========================================================================
-% REPRESENTACIÓN GRÁFICA MULTI-ESCENARIO
+% 9. REPRESENTACIÓN GRÁFICA MULTI-ESCENARIO
 % =========================================================================
 figure('Name', 'Análisis de Sensibilidad EKF', 'Color', 'w', 'Units', 'normalized', 'Position', [0.05, 0.2, 0.9, 0.5]);
 colores_ekf = {'#D95319', '#A2142F', '#0072BD'}; % Naranja, Granate, Azul
@@ -543,7 +551,7 @@ end
 fprintf('---------------------------------------\n');
 
 %% =========================================================================
-% 6. ALINEACIÓN DE CENTROS DE MASA Y CÁLCULO DE ERROR RMSE
+% 10. ALINEACIÓN DE CENTROS DE MASA Y CÁLCULO DE ERROR RMSE
 % =========================================================================
 offset_norte = mean(hist_pos(1,:)) - mean(gt_norte);
 offset_este  = mean(hist_pos(2,:)) - mean(gt_este);
@@ -567,7 +575,7 @@ end
 rmse_3d_espacial = sqrt(mean(error_distancia.^2));
 
 %% =========================================================================
-% 7. REPRESENTACIÓN GRÁFICA (TFG)
+% 11. REPRESENTACIÓN GRÁFICA (TFG)
 % =========================================================================
 
 % --- FIGURA 2: LA SOLUCIÓN (Fusión EKF) ---
@@ -589,8 +597,9 @@ ylabel('Este (m)', 'FontWeight', 'bold');
 zlabel('Abajo (m)', 'FontWeight', 'bold');
 title('GPS Crudo vs Ground Truth', 'FontSize', 12);
 legend('Location', 'best');
+
 % %% =========================================================================
-% % 8. DIAGNÓSTICO EN DETALLE: TRÍPTICO 2D DE LA DERIVA INERCIAL (SUBPLOT)
+% % 12. DIAGNÓSTICO EN DETALLE: TRÍPTICO 2D DE LA DERIVA INERCIAL (SUBPLOT)
 % % =========================================================================
 % fprintf('Generando tríptico 2D con subplots para la memoria...\n');
 % 
@@ -634,48 +643,10 @@ legend('Location', 'best');
 %%  quizás una gráfica donde se vea el error del INS y como diverge respecto
 %% del Ground Truth
 
-%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% 9. Sacamos bias ya calculados para comparar
-% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
-tabla_bias  = readtable(fullfile(carpetaData, 'OnboardPose.csv'), opts{:});
-
-% ... (aquí tendrás tus extracciones de a_x, w_x, etc.) ...
-
-% --- EXTRACCIÓN DE SESGOS DEL DATASET (Añadir esto) ---
-AccBias_x = tabla_bias.AccBias_x;
-AccBias_y = tabla_bias.AccBias_y;
-AccBias_z = tabla_bias.AccBias_z;
-
-%--- SACAMOS LAS ACELERACIONES
-Accel_x=tabla_bias.Accel_x;
-Accel_y=tabla_bias.Accel_y;
-Accel_z=tabla_bias.Accel_z;
-
-%Nos hemos dado cuanta que las columnas de Bias no son el bias puro, sino
-%simplemente la aceleración con ya la incorporación del bias
-
-% Creamos un vector de tiempo relativo empezando en cero
-t_autopilot = (tabla_bias.Timpstemp - tabla_bias.Timpstemp(1)) / 1e6;
-
-% figure('Name', 'Sesgos del Autopiloto (Escala Real)', 'Color', 'w', 'Position', [100, 100, 800, 400]);
-% 
-% plot(t_autopilot, Accel_x - AccBias_x, 'r', 'LineWidth', 1.5, 'DisplayName', 'Sesgo Eje X'); hold on;
-% plot(t_autopilot, Accel_y - AccBias_y, 'g', 'LineWidth', 1.5, 'DisplayName', 'Sesgo Eje Y');
-% plot(t_autopilot, Accel_z - AccBias_z, 'b', 'LineWidth', 1.5, 'DisplayName', 'Sesgo Eje Z');
-% 
-% grid on;
-% xlabel('Tiempo de vuelo (s)', 'FontWeight', 'bold');
-% ylabel('Aceleración (m/s^2)', 'FontWeight', 'bold');
-% title('Evolución de los Sesgos con Escala de Tiempo Correcta', 'FontSize', 12);
-% legend('Location', 'best');
-% 
-
-
-
-% =========================================================================
-% INICIALIZACIÓN: ESTIMACIÓN DINÁMICA ANTI-MULTIPATH
+%% =========================================================================
+% 13. INICIALIZACIÓN: ESTIMACIÓN DINÁMICA ANTI-MULTIPATH. (EKF 15 ESTADOS)
 % =========================================================================
 fprintf('\nIniciando EKF 15 Estados: Aprendizaje en vuelo ultra-lento...\n');
 
@@ -733,70 +704,91 @@ if idx_gps_15 < length(t_gps_unique)
     x_est_15(9) = yaw_inicial_15; 
 end
 
-% --- 3. BUCLE DE INTEGRACIÓN ASÍNCRONA ---
+% --- 3. BUCLE DE INTEGRACIÓN ASÍNCRONA CORREGIDO (INS + GPS) ---
 for k = 2:num_muestras
     dt = t_accel(k) - t_accel(k-1);
     if dt <= 0, dt = 1e-4; end 
-    
-    % LAZO CERRADO: Restamos los sesgos estimados en la iteración anterior
+
+    % LAZO CERRADO: Restamos los sesgos estimados
     a_b_limpia = [a_x(k); a_y(k); a_z(k)] - x_est_15(10:12);
     w_b_limpia = [w_x(k); w_y(k); w_z(k)] - x_est_15(13:15);
-    
+
     phi_15 = x_est_15(7); theta_15 = x_est_15(8); psi_15 = x_est_15(9);
+
+    % 1. Matriz de Rotación (Body a NED para Aceleraciones)
     R_b_n_15 = [cos(theta_15)*cos(psi_15), sin(phi_15)*sin(theta_15)*cos(psi_15)-cos(phi_15)*sin(psi_15), cos(phi_15)*sin(theta_15)*cos(psi_15)+sin(phi_15)*sin(psi_15);
-                cos(theta_15)*sin(psi_15), sin(phi_15)*sin(theta_15)*sin(psi_15)+cos(phi_15)*cos(psi_15), cos(phi_15)*sin(theta_15)*sin(psi_15)-sin(phi_15)*cos(psi_15);
-                -sin(theta_15),            sin(phi_15)*cos(theta_15),                                     cos(phi_15)*cos(theta_15)];
-             
+        cos(theta_15)*sin(psi_15), sin(phi_15)*sin(theta_15)*sin(psi_15)+cos(phi_15)*cos(psi_15), cos(phi_15)*sin(theta_15)*sin(psi_15)-sin(phi_15)*cos(psi_15);
+        -sin(theta_15),            sin(phi_15)*cos(theta_15),                                     cos(phi_15)*cos(theta_15)];
+
     a_n_15 = R_b_n_15 * a_b_limpia + gravedad_n; 
-    
+
+    % 2. LA CLAVE: Matriz de Tasas de Euler (Body Rates a Euler Rates)
+    E_mat = [1, sin(phi_15)*tan(theta_15), cos(phi_15)*tan(theta_15);
+        0, cos(phi_15),               -sin(phi_15);
+        0, sin(phi_15)/cos(theta_15), cos(phi_15)/cos(theta_15)];
+
     % Predicción cinemática
     p_prev_15 = x_est_15(1:3); v_prev_15 = x_est_15(4:6);
     x_pred_15 = zeros(15,1);
-    
+
     x_pred_15(1:3)   = p_prev_15 + v_prev_15 * dt + 0.5 * a_n_15 * dt^2; 
     x_pred_15(4:6)   = v_prev_15 + a_n_15 * dt;                       
-    x_pred_15(7:9)   = x_est_15(7:9) + w_b_limpia * dt;                   
+    x_pred_15(7:9)   = x_est_15(7:9) + (E_mat * w_b_limpia) * dt; % <-- Corrección aquí                   
     x_pred_15(10:15) = x_est_15(10:15); 
-    
-    % Jacobiano estendido de 15x15
+
+    % Jacobiano extendido de 15x15
     F_15 = eye(15);
     F_15(1:3, 4:6) = eye(3) * dt; 
-    
+
+    % Derivadas de la matriz de rotación (Igual que tenías)
     dR_dphi_15 = [0,  cos(phi_15)*sin(theta_15)*cos(psi_15)+sin(phi_15)*sin(psi_15), -sin(phi_15)*sin(theta_15)*cos(psi_15)+cos(phi_15)*sin(psi_15);
-                  0,  cos(phi_15)*sin(theta_15)*sin(psi_15)-sin(phi_15)*cos(psi_15), -sin(phi_15)*sin(theta_15)*sin(psi_15)-cos(phi_15)*cos(psi_15);
-                  0,  cos(phi_15)*cos(theta_15),                                     -sin(phi_15)*cos(theta_15)];
+        0,  cos(phi_15)*sin(theta_15)*sin(psi_15)-sin(phi_15)*cos(psi_15), -sin(phi_15)*sin(theta_15)*sin(psi_15)-cos(phi_15)*cos(psi_15);
+        0,  cos(phi_15)*cos(theta_15),                                     -sin(phi_15)*cos(theta_15)];
     dR_dtheta_15 = [-sin(theta_15)*cos(psi_15), sin(phi_15)*cos(theta_15)*cos(psi_15), cos(phi_15)*cos(theta_15)*cos(psi_15);
-                    -sin(theta_15)*sin(psi_15), sin(phi_15)*cos(theta_15)*sin(psi_15), cos(phi_15)*cos(theta_15)*sin(psi_15);
-                    -cos(theta_15),             -sin(phi_15)*sin(theta_15),            -cos(phi_15)*sin(theta_15)];
+        -sin(theta_15)*sin(psi_15), sin(phi_15)*cos(theta_15)*sin(psi_15), cos(phi_15)*cos(theta_15)*sin(psi_15);
+        -cos(theta_15),             -sin(phi_15)*sin(theta_15),            -cos(phi_15)*sin(theta_15)];
     dR_dpsi_15 = [-cos(theta_15)*sin(psi_15), -sin(phi_15)*sin(theta_15)*sin(psi_15)-cos(phi_15)*cos(psi_15), -cos(phi_15)*sin(theta_15)*sin(psi_15)+sin(phi_15)*cos(psi_15);
-                   cos(theta_15)*cos(psi_15),  sin(phi_15)*sin(theta_15)*cos(psi_15)-cos(phi_15)*sin(psi_15),  cos(phi_15)*sin(theta_15)*cos(psi_15)+sin(phi_15)*sin(psi_15);
-                   0,                          0,                                                             0];
-                
+        cos(theta_15)*cos(psi_15),  sin(phi_15)*sin(theta_15)*cos(psi_15)-cos(phi_15)*sin(psi_15),  cos(phi_15)*sin(theta_15)*cos(psi_15)+sin(phi_15)*sin(psi_15);
+        0,                          0,                                                             0];
+
     F_15(4:6, 7:9)   = [dR_dphi_15 * a_b_limpia, dR_dtheta_15 * a_b_limpia, dR_dpsi_15 * a_b_limpia] * dt;
     F_15(4:6, 10:12) = -R_b_n_15 * dt; 
-    F_15(7:9, 13:15) = -eye(3) * dt; 
-    
+
+    % 3. CORRECCIÓN DEL JACOBIANO DE ACTITUD
+    % A) Derivadas de las Tasas de Euler respecto a los propios ángulos phi y theta
+    wx = w_b_limpia(1); wy = w_b_limpia(2); wz = w_b_limpia(3);
+
+    dEuler_dAtt = [ (cos(phi_15)*tan(theta_15)*wy - sin(phi_15)*tan(theta_15)*wz), (sin(phi_15)*sec(theta_15)^2*wy + cos(phi_15)*sec(theta_15)^2*wz), 0;
+        -(sin(phi_15)*wy + cos(phi_15)*wz),                             0,                                                               0;
+        (cos(phi_15)*sec(theta_15)*wy - sin(phi_15)*sec(theta_15)*wz), (sin(phi_15)*sec(theta_15)*tan(theta_15)*wy + cos(phi_15)*sec(theta_15)*tan(theta_15)*wz), 0 ];
+
+    F_15(7:9, 7:9)   = eye(3) + dEuler_dAtt * dt;
+
+    % B) Acoplamiento del sesgo del giróscopo a la actitud (multiplicado por E_mat)
+    F_15(7:9, 13:15) = -E_mat * dt; % <-- Corrección aquí
+
+    % Propagación de covarianza
     P_pred_15 = F_15 * P_15 * F_15' + Q_c_15 * dt ; 
-    
+
     x_est_15 = x_pred_15;
     P_15 = P_pred_15;
-    
-    % Corrección asíncrona por satélite
+
+    % Corrección asíncrona por satélite (GNSS 3D Crudo)
     while idx_gps_15 <= length(t_gps_unique) && t_accel(k) >= t_gps_unique(idx_gps_15)
         z_gps = [p_gps_norte_u(idx_gps_15); p_gps_este_u(idx_gps_15); p_gps_abajo_u(idx_gps_15)];
         y_innov = z_gps - H_15 * x_pred_15;
-        
+
         S = H_15 * P_pred_15 * H_15' + R_15;
         K = P_pred_15 * H_15' / S;
-        
+
         x_est_15 = x_pred_15 + K * y_innov;
         P_15 = (I_15 - K * H_15) * P_pred_15 * (I_15 - K * H_15)' + K * R_15 * K'; 
-        
+
         x_pred_15 = x_est_15;
         P_pred_15 = P_15;
         idx_gps_15 = idx_gps_15 + 1; 
     end
-    
+
     hist_pos_15(:, k) = x_est_15(1:3);
     hist_bias_acc(:, k) = x_est_15(10:12);
     hist_bias_gyr(:, k) = x_est_15(13:15);
@@ -828,7 +820,44 @@ fprintf('==================================================================\n');
 
 
 % =========================================================================
-% 5. FILTRO DE KALMAN MULTISENSOR (GPS 2D + BARÓMETRO 1D)
+% 14. ANÁLISIS DE LA CONTAMINACIÓN DE SESGOS (EKF 15 ESTADOS)
+% =========================================================================
+figure('Name', 'Autopsia del Filtro: Evolución de Sesgos', 'NumberTitle', 'off');
+clf;
+
+% --- 1. Gráfica de los Sesgos del Acelerómetro ---
+subplot(2,1,1);
+hold on;
+plot(t_accel, hist_bias_acc(1,:), 'r', 'LineWidth', 1.2, 'DisplayName', 'Sesgo X (Roll)');
+plot(t_accel, hist_bias_acc(2,:), 'g', 'LineWidth', 1.2, 'DisplayName', 'Sesgo Y (Pitch)');
+plot(t_accel, hist_bias_acc(3,:), 'b', 'LineWidth', 1.5, 'DisplayName', 'Sesgo Z (Vertical)');
+title('Evolución de los Sesgos Estimados (Acelerómetros)');
+xlabel('Tiempo (s)');
+ylabel('Sesgo Falso inyectado (m/s^2)');
+grid on;
+legend('Location', 'best');
+hold off;
+
+% --- 2. Gráfica de los Sesgos del Giróscopo ---
+subplot(2,1,2);
+hold on;
+% Los pasamos a grados por segundo para leerlos de forma más intuitiva
+plot(t_accel, rad2deg(hist_bias_gyr(1,:)), 'r', 'LineWidth', 1.2, 'DisplayName', 'Sesgo \omega_x');
+plot(t_accel, rad2deg(hist_bias_gyr(2,:)), 'g', 'LineWidth', 1.2, 'DisplayName', 'Sesgo \omega_y');
+plot(t_accel, rad2deg(hist_bias_gyr(3,:)), 'b', 'LineWidth', 1.5, 'DisplayName', 'Sesgo \omega_z');
+title('Evolución de los Sesgos Estimados (Giróscopos)');
+xlabel('Tiempo (s)');
+ylabel('Sesgo Falso inyectado (deg/s)');
+grid on;
+legend('Location', 'best');
+hold off;
+
+
+
+
+
+%% =========================================================================
+% 15. FILTRO DE KALMAN MULTISENSOR (GPS 2D + BARÓMETRO 1D)
 % =========================================================================
 fprintf('\nCalculando trayectoria EKF con fusión GPS + Barómetro...\n');
 
@@ -953,7 +982,7 @@ end
 fprintf('¡Filtro multisensor completado con segregación de ejes!\n');
 
 % =========================================================================
-% 6. ALINEACIÓN DE CENTROS DE MASA Y CÁLCULO DE ERROR RMSE REAL
+% 16. ALINEACIÓN DE CENTROS DE MASA Y CÁLCULO DE ERROR RMSE REAL
 % =========================================================================
 fprintf('\nCalculando RMSE definitivo mediante alineación de centros de masa...\n');
 
@@ -989,7 +1018,7 @@ fprintf('--- RESULTADOS DEFINITIVOS DE LA FUSIÓN MULTISENSOR ---\n');
 fprintf('RMSE 3D Espacial Real: %.4f metros\n', rmse_3d_real);
 
 %% =========================================================================
-% 8. DIAGNÓSTICO DE SALUD DEL EKF: CONVERGENCIA DE LA COVARIANZA (3-SIGMA)
+% 17. DIAGNÓSTICO DE SALUD DEL EKF: CONVERGENCIA DE LA COVARIANZA (3-SIGMA)
 % =========================================================================
 fprintf('\nGenerando análisis de confianza del filtro (3-Sigma)...\n');
 
@@ -1034,7 +1063,7 @@ grid on; xlabel('Tiempo (s)'); ylabel('Incertidumbre Z (m)');
 fprintf('Gráfica 3-Sigma generada. Revisa la estabilidad del "tubo".\n');
 
 % =========================================================================
-% 9. CONVERGENCIA INICIAL DE LA COVARIANZA (TRANSIENTE DEL EKF)
+% 18. CONVERGENCIA INICIAL DE LA COVARIANZA (TRANSIENTE DEL EKF)
 % =========================================================================
 fprintf('\nGenerando gráfica de convergencia inicial de la covarianza...\n');
 
@@ -1068,7 +1097,7 @@ fprintf('Gráfica de convergencia inicial generada.\n');
 
 
 %% =========================================================================
-% 10. VISUALIZACIÓN 3D DE TRAYECTORIAS (GT vs EKF vs GPS CRUDO)
+% 19. VISUALIZACIÓN 3D DE TRAYECTORIAS (GT vs EKF vs GPS CRUDO)
 % =========================================================================
 fprintf('\nGenerando gráfica 3D de trayectorias con GPS crudo...\n');
 
@@ -1126,7 +1155,7 @@ fprintf('Gráfica 3D generada con éxito.\n');
 
 
 % =========================================================================
-% 11. ANÁLISIS DE PROYECCIONES ORTOGONALES (VISTAS 2D)
+% 20. ANÁLISIS DE PROYECCIONES ORTOGONALES (VISTAS 2D)
 % =========================================================================
 fprintf('\nGenerando trifigura de proyecciones ortogonales...\n');
 
