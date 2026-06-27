@@ -10,8 +10,7 @@ El objetivo principal es construir un entorno de simulación y validación para 
 - Representación de trayectorias GPS/GNSS y variables de actitud.
 - Integración inercial para observar la deriva acumulada, y error del sistema GPS.
 - Fusión sensorial GNSS-INS mediante EKF.
-- Comparación entre INS pura, EKF síncrono de 5 estados (Caso A), EKF asíncrono multi-rate de 8 estados (Caso B), EKF de 9 estados (Caso C), EKF de 15 estados (Caso D) y EKF de 9 estados con fusión del alímetro barométri o..
-- 
+- Comparación entre INS pura, EKF síncrono de 5 estados (Caso A), EKF asíncrono multi-rate de 8 estados (Caso B), EKF de 9 estados (Caso C), EKF de 15 estados (Caso D) y EKF de 9 estados con fusión del alímetro barométrico.
 - Generación de gráficas y métricas para documentar los resultados del TFG.
 
 ## Estado del proyecto
@@ -94,16 +93,31 @@ run("Generacion_trayectoria.m")
 
 `Dron_de_zurich4.m` genera un conjunto de figuras para comparar:
 
-- Deriva de la INS pura frente al ground truth.
-- EKF síncrono frente a EKF asíncrono.
-- Trayectorias 3D en ejes Norte-Este-Abajo.
-- Efecto del filtrado Butterworth sobre la señal GNSS interpolada.
-- Detalle multi-rate de predicción INS, muestras GPS y estimación posterior del EKF.
+
+- Trayectorias 3D en ejes Norte-Este-Abajo, del GPS y la trayectoria de referencia Ground Truth.
+- Representación de la actitud, roll, pith y yaw.
+- Error del GPS y su RMSE.
+- Estimación del EKF de 8 estados e impacto de modificar matrices Q y R y su RMSE.
+- Estimación del EKF de 15 estados con bias.
+- Impacto del filtro con integración del sensor barométrico
 
 También imprime métricas finales en la consola de MATLAB:
 
 - RMSE del EKF .
 - Deriva final de la INS pura.
+- RMSE GPS Crudo          
+- RMSE EKF 9 Estados  
+- RMSE EKF 15 Estados     
+- Mejora absoluta del 15E 
+
+
+`Generacion_trayectoria.m` genera un conjunto de figuras para comparar:
+
+- Estado de la actitud y consecuencias de no alineamiento inicial
+- Comparación de trayectorias mediante integración de la aceleración, mediante odometría en comparación a la de referencia, y sus errores. Efecto del filtrado Butterworth sobre la señal GNSS interpolada.
+- EKF síncrono frente a EKF asíncrono y con degradación de GPS
+- Error de posición con y sin cálculo del bias
+  
 
 ## Notas de implementación
 
@@ -123,7 +137,6 @@ También imprime métricas finales en la consola de MATLAB:
 - Las rutas a datasets están codificadas dentro de los scripts y deben adaptarse a cada PC.
 - Los datasets no se versionan en Git por tamaño y por tratarse de datos externos.
 - Varios archivos son prototipos o apuntes de desarrollo, no módulos cerrados.
-- La estimación todavía no incluye un modelo completo de sesgos de acelerómetro y giroscopio.
 - `Generacion_trayectoria.asv` es un archivo de autosalvado de MATLAB y podría eliminarse del control de versiones en una limpieza futura.
 
 ## Próximos pasos recomendados
