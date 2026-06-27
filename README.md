@@ -1,33 +1,34 @@
 # TFG: Desarrollo de un entorno de simulación GNSS-INS
 
-Repositorio de trabajo para el TFG centrado en la generación, análisis y fusión de trayectorias GNSS/INS con MATLAB. El proyecto usa datos reales de vehículos terrestres y aéreos para estudiar la deriva de la navegación inercial pura y la mejora obtenida al fusionar medidas GNSS mediante filtros de Kalman.
+Repositorio de trabajo para el TFG centrado en la generación, análisis y fusión de trayectorias GNSS/INS con MATLAB. El proyecto usa datos reales de vehículos terrestres y aéreos para estudiar la deriva de la navegación inercial pura y la mejora obtenida al fusionar medidas GNSS mediante filtros de Kalman extendidos (EKF).
 
 ## Objetivo
 
 El objetivo principal es construir un entorno de simulación y validación para navegación integrada GNSS-INS:
 
-- Lectura y preparación de datasets reales con sensores GNSS, IMU y ground truth.
+- Lectura y preparación de datasets reales con sensores GNSS, IMU, ground truth y datos barometricos (se irán utilizando a medida que avanza el desarrollo.
 - Representación de trayectorias GPS/GNSS y variables de actitud.
-- Integración inercial para observar la deriva acumulada.
+- Integración inercial para observar la deriva acumulada, y error del sistema GPS.
 - Fusión sensorial GNSS-INS mediante EKF.
-- Comparación entre INS pura, EKF síncrono y EKF asíncrono multi-rate.
+- Comparación entre INS pura, EKF síncrono de 5 estados (Caso A), EKF asíncrono multi-rate de 8 estados (Caso B), EKF de 9 estados (Caso C), EKF de 15 estados (Caso D) y EKF de 9 estados con fusión del alímetro barométrico.
 - Generación de gráficas y métricas para documentar los resultados del TFG.
 
 ## Estado del proyecto
 
-El repositorio está en desarrollo y contiene scripts exploratorios junto a una versión más completa del flujo GNSS-INS para el dataset del dron de Zúrich. Actualmente los datasets no están incluidos en el repositorio y las rutas se configuran dentro de cada script.
+El repositorio está terminado, pero al haber sido para un estudio con casos reales, contiene scripts exploratorios junto a dos versión más completas del flujo GNSS-INS para el dataset del coche y el dron de Zúrich. Actualmente los datasets no están incluidos en el repositorio y las rutas se configuran dentro de cada script.
 
 ## Estructura del repositorio
 
 | Archivo | Descripción |
 | --- | --- |
-| `Generacion_trayectoria.m` | Procesado de datos KITTI/OXTS de coche: lectura GPS, actitud, integración, comparación de trayectorias y primera fusión GNSS-INS con EKF. |
+| `Generacion_trayectoria.m` | Procesado de datos KITTI/OXTS de coche y desarrollo de algoritmo completo: lectura GPS, actitud, integración, comparación de trayectorias síncronas y asíncronas y primera fusión GNSS-INS con EKF. |
+| `Dron_de_zurich4.m` | Procesado de datos del dron de Zúrich y desarrollo del algortimo completo. Carga CSV, alinea sensores, muestra la deriva de la navegación inercial pura, evalúa caso de 9, 15 estados, además de fusionar datos del barómetro |
 | `Dron_de_zurich.m` | Primer flujo con el dataset de dron de Zúrich. Carga CSV, alinea sensores y muestra la deriva de una navegación inercial pura. |
-| `Dron_de_zurich3.m` | Prototipo de EKF 3D síncrono para el dataset de Zúrich, con diagnóstico temporal de las entradas GPS interpoladas. |
-| `Dron_de_zurich5.m` | Script principal más avanzado: compara INS pura, EKF síncrono y EKF asíncrono multi-rate, aplica filtrado antialiasing y calcula RMSE. |
-| `Kalman_1_dimension.m` | Borrador para pruebas iniciales de filtro de Kalman en una dimensión. |
-| `Datasets.m` | Apuntes iniciales sobre datasets. |
-| `untitled.m` | Archivo de práctica para simulaciones. |
+| `Dron_de_zurich3.m` | Borrador |
+| `Dron_de_zurich5.m` | Borrador |
+| `Kalman_1_dimension.m` | Borrador |
+| `Datasets.m` | Borrados |
+| `untitled.m` |Borrador |
 | `Generacion_trayectoria.asv` | Copia automática generada por MATLAB. No es necesaria para ejecutar el proyecto. |
 
 ## Datasets esperados
@@ -90,19 +91,33 @@ run("Generacion_trayectoria.m")
 
 ## Resultados que genera
 
-`Dron_de_zurich5.m` genera un conjunto de figuras para comparar:
+`Dron_de_zurich4.m` genera un conjunto de figuras para comparar:
 
-- Deriva de la INS pura frente al ground truth.
-- EKF síncrono frente a EKF asíncrono.
-- Trayectorias 3D en ejes Norte-Este-Abajo.
-- Efecto del filtrado Butterworth sobre la señal GNSS interpolada.
-- Detalle multi-rate de predicción INS, muestras GPS y estimación posterior del EKF.
+
+- Trayectorias 3D en ejes Norte-Este-Abajo, del GPS y la trayectoria de referencia Ground Truth.
+- Representación de la actitud, roll, pith y yaw.
+- Error del GPS y su RMSE.
+- Estimación del EKF de 8 estados e impacto de modificar matrices Q y R y su RMSE.
+- Estimación del EKF de 15 estados con bias.
+- Impacto del filtro con integración del sensor barométrico
 
 También imprime métricas finales en la consola de MATLAB:
 
-- RMSE del EKF síncrono.
-- RMSE del EKF asíncrono.
+- RMSE del EKF .
 - Deriva final de la INS pura.
+- RMSE GPS Crudo          
+- RMSE EKF 9 Estados  
+- RMSE EKF 15 Estados     
+- Mejora absoluta del 15E 
+
+
+`Generacion_trayectoria.m` genera un conjunto de figuras para comparar:
+
+- Estado de la actitud y consecuencias de no alineamiento inicial
+- Comparación de trayectorias mediante integración de la aceleración, mediante odometría en comparación a la de referencia, y sus errores. Efecto del filtrado Butterworth sobre la señal GNSS interpolada.
+- EKF síncrono frente a EKF asíncrono y con degradación de GPS
+- Error de posición con y sin cálculo del bias
+  
 
 ## Notas de implementación
 
@@ -122,7 +137,6 @@ También imprime métricas finales en la consola de MATLAB:
 - Las rutas a datasets están codificadas dentro de los scripts y deben adaptarse a cada PC.
 - Los datasets no se versionan en Git por tamaño y por tratarse de datos externos.
 - Varios archivos son prototipos o apuntes de desarrollo, no módulos cerrados.
-- La estimación todavía no incluye un modelo completo de sesgos de acelerómetro y giroscopio.
 - `Generacion_trayectoria.asv` es un archivo de autosalvado de MATLAB y podría eliminarse del control de versiones en una limpieza futura.
 
 ## Próximos pasos recomendados
