@@ -236,7 +236,7 @@ fprintf('¡Gráfica combinada generada!\n');
 
 
 %% =========================================================================
-% 7.. FILTRO DE KALMAN E INTEGRACIÓN INERCIAL PURA
+% 7.. FILTRO DE KALMAN (9 ESTADOS) E INTEGRACIÓN INERCIAL PURA
 % =========================================================================
 fprintf('Calculando trayectoria EKF y Deriva Inercial...\n');
 
@@ -384,21 +384,17 @@ end
 fprintf('¡Filtro de 9 estados asíncrono completado!\n');
 
 %% =========================================================================
-% 8. ANÁLISIS DE SENSIBILIDAD EKF (TUNING Q Y R)
+% 8. ANÁLISIS DE SENSIBILIDAD EKF (TUNING Q Y R) - CORREGIDO
 % =========================================================================
-%Lo que ocurría en el bucle
-%anterior es que asumimos que Q tenía mucho ruido y R poco, entonces lo
-%que pasa es que el filtro confía ciegamente en los datos GPS. Sin embargo
-%como vimos en las gráficas de error los datos GPS también acumulan error,
-%y hay que ser consistente y tener un equilibrio entre el peso que se le da
-%tanto a los datos GPS como INS. 
-
+% CORRECCIÓN PRINCIPAL: Integración de ángulos de Euler mediante la
+% matriz de tasas cinemáticas T_euler en lugar de asumir w_b ≈ euler_dot.
+% La relación correcta es: [phi_dot; theta_dot; psi_dot] = T_euler * w_b
 
 fprintf('Iniciando Análisis de Sensibilidad del EKF (3 Escenarios)...\n');
-g = 9.81; 
-gravedad_n = [0; 0; g]; 
+g = 9.81;
+gravedad_n = [0; 0; g];
 I_9 = eye(9);
-H = [eye(3), zeros(3, 6)]; 
+H = [eye(3), zeros(3, 6)];
 num_muestras = length(t_accel);
 
 % Variables para almacenar resultados
@@ -409,70 +405,84 @@ P_gt_transpuesta = [gt_norte, gt_este, gt_abajo]';
 
 for caso = 1:3
     fprintf('  -> Ejecutando %s...\n', nombres_casos{caso});
-    
+
     % --- 1. CONFIGURACIÓN DE MATRICES ESTOCÁSTICAS SEGÚN CASO ---
     x_est = zeros(9,1);
-    P = diag([1 1 1, 0.5 0.5 0.5, deg2rad(5)*ones(1,3)]); 
-    
+    P = diag([1 1 1, 0.5 0.5 0.5, deg2rad(5)*ones(1,3)]);
+
     if caso == 1
-        % CASO A: Sobreconfianza en INS (Q pequeña, R enorme)
-        sigma_pos = 0.01; 
-        sigma_vel = 0.01; 
+        sigma_pos = 0.01;
+        sigma_vel = 0.01;
         sigma_att = deg2rad(0.1);
-        R = diag([50^2, 50^2, 100^2]); 
+        R = diag([50^2, 50^2, 100^2]);
     elseif caso == 2
-        % CASO B: Sobreconfianza en GNSS (Q enorme, R pequeña)
         sigma_pos = 10.0; sigma_vel = 10.0; sigma_att = deg2rad(20.0);
-        R = diag([0.01^2, 0.01^2, 0.01^2]); 
+        R = diag([0.01^2, 0.01^2, 0.01^2]);
     else
-        % CASO C: Sweet Spot (Equilibrio)
-        sigma_pos = 0.2; 
-        sigma_vel = 0.2; 
-        sigma_att = deg2rad(0.5); 
-        R = diag([3.0^2, 3.0^2, 6.0^2]); 
-        
+        sigma_pos = 0.2;
+        sigma_vel = 0.2;
+        sigma_att = deg2rad(0.5);
+        R = diag([3.0^2, 3.0^2, 6.0^2]);
     end
-    
+
     Q_c = diag([sigma_pos^2*ones(1,3), sigma_vel^2*ones(1,3), sigma_att^2*ones(1,3)]);
-    
+
     % --- 2. REINICIO Y ANCLAJE DE CONDICIONES INICIALES ---
     hist_pos = zeros(3, num_muestras);
     idx_gps = 1;
     while idx_gps <= length(t_gps_unique) && t_gps_unique(idx_gps) < t_accel(1)
         idx_gps = idx_gps + 1;
     end
-    
+
     if idx_gps < length(t_gps_unique)
         x_est(1:3) = [p_gps_norte_u(idx_gps); p_gps_este_u(idx_gps); p_gps_abajo_u(idx_gps)];
         yaw_inicial = atan2(p_gps_este_u(idx_gps+1) - p_gps_este_u(idx_gps), ...
                             p_gps_norte_u(idx_gps+1) - p_gps_norte_u(idx_gps));
-        x_est(9) = yaw_inicial; 
+        x_est(9) = yaw_inicial;
     end
-    
+
     % --- 3. MOTOR EKF ASÍNCRONO ---
     for k = 2:num_muestras
         dt = t_accel(k) - t_accel(k-1);
-        if dt <= 0, dt = 1e-4; end 
-        
+        if dt <= 0, dt = 1e-4; end
+
         a_b = [a_x(k); a_y(k); a_z(k)];
         w_b = [w_x(k); w_y(k); w_z(k)];
-        
-        phi = x_est(7); theta = x_est(8); psi = x_est(9);
+
+        phi   = x_est(7);
+        theta = x_est(8);
+        psi   = x_est(9);
+
+        % Matriz de rotación cuerpo → navegación
         R_b_n = [cos(theta)*cos(psi), sin(phi)*sin(theta)*cos(psi)-cos(phi)*sin(psi), cos(phi)*sin(theta)*cos(psi)+sin(phi)*sin(psi);
                  cos(theta)*sin(psi), sin(phi)*sin(theta)*sin(psi)+cos(phi)*cos(psi), cos(phi)*sin(theta)*sin(psi)-sin(phi)*cos(psi);
                  -sin(theta),         sin(phi)*cos(theta),                            cos(phi)*cos(theta)];
-        a_n = R_b_n * a_b + gravedad_n; 
-        
-        % Predicción
-        p_prev = x_est(1:3); v_prev = x_est(4:6);
+
+        a_n = R_b_n * a_b + gravedad_n;
+
+        % [CORRECCIÓN] Matriz cinemática de Euler (convierte w_b a euler_dot)
+        % Válida para theta != ±90° (gimbal lock). Si tu dron no hace loops,
+        % esto es siempre seguro.
+        T_euler = [1,  sin(phi)*tan(theta),  cos(phi)*tan(theta);
+                   0,  cos(phi),            -sin(phi);
+                   0,  sin(phi)/cos(theta),  cos(phi)/cos(theta)];
+
+        % [CORRECCIÓN] Tasas de Euler correctas
+        euler_dot = T_euler * w_b;
+
+        % Predicción de estado
+        p_prev = x_est(1:3);
+        v_prev = x_est(4:6);
         x_pred = zeros(9,1);
-        x_pred(1:3) = p_prev + v_prev * dt + 0.5 * a_n * dt^2; 
-        x_pred(4:6) = v_prev + a_n * dt;                       
-        x_pred(7:9) = x_est(7:9) + w_b * dt;                   
-        
+        x_pred(1:3) = p_prev + v_prev * dt + 0.5 * a_n * dt^2;
+        x_pred(4:6) = v_prev + a_n * dt;
+        x_pred(7:9) = x_est(7:9) + euler_dot * dt;  % [CORRECCIÓN aplicada aquí]
+
+        % Jacobiano F
         F = eye(9);
-        F(1:3, 4:6) = eye(3) * dt; 
-        
+        F(1:3, 4:6) = eye(3) * dt;
+
+        % Jacobianos de R_b_n respecto a ángulos de Euler
         dR_dphi = [0,  cos(phi)*sin(theta)*cos(psi)+sin(phi)*sin(psi), -sin(phi)*sin(theta)*cos(psi)+cos(phi)*sin(psi);
                    0,  cos(phi)*sin(theta)*sin(psi)-sin(phi)*cos(psi), -sin(phi)*sin(theta)*sin(psi)-cos(phi)*cos(psi);
                    0,  cos(phi)*cos(theta),                            -sin(phi)*cos(theta)];
@@ -482,31 +492,49 @@ for caso = 1:3
         dR_dpsi = [-cos(theta)*sin(psi), -sin(phi)*sin(theta)*sin(psi)-cos(phi)*cos(psi), -cos(phi)*sin(theta)*sin(psi)+sin(phi)*cos(psi);
                     cos(theta)*cos(psi),  sin(phi)*sin(theta)*cos(psi)-cos(phi)*sin(psi),  cos(phi)*sin(theta)*cos(psi)+sin(phi)*sin(psi);
                     0,                    0,                                              0];
+
+        % [CORRECCIÓN] Jacobianos de T_euler respecto a phi y theta
+        % (derivadas de la cinemática de Euler para la linealización de F)
+        dT_dphi = [0,  cos(phi)*tan(theta), -sin(phi)*tan(theta);
+                   0, -sin(phi),            -cos(phi);
+                   0,  cos(phi)/cos(theta), -sin(phi)/cos(theta)];
+
+        dT_dtheta = [0,  sin(phi)/cos(theta)^2,  cos(phi)/cos(theta)^2;
+                     0,  0,                       0;
+                     0,  sin(phi)*sin(theta)/cos(theta)^2,  cos(phi)*sin(theta)/cos(theta)^2];
+
+        % Bloque F para posición/velocidad (influencia de actitud)
         F(4:6, 7:9) = [dR_dphi * a_b, dR_dtheta * a_b, dR_dpsi * a_b] * dt;
-        
-        P_pred = F * P * F' + Q_c * dt; 
-        
+
+        % [CORRECCIÓN] Bloque F para actitud (influencia de actitud sobre euler_dot)
+        %F(7:9, 7)   = dT_dphi   * w_b * dt;   % d(euler_dot)/d(phi)
+        %F(7:9, 8)   = dT_dtheta * w_b * dt;   % d(euler_dot)/d(theta)
+        % psi no aparece en T_euler → F(7:9, 9) queda en cero (ya incluido en eye(9))
+
+        P_pred = F * P * F' + Q_c * dt;
+
         x_est = x_pred;
         P = P_pred;
-        
-        % Corrección Asíncrona
+
+        % Corrección asíncrona con GPS
         while idx_gps <= length(t_gps_unique) && t_accel(k) >= t_gps_unique(idx_gps)
             z_gps = [p_gps_norte_u(idx_gps); p_gps_este_u(idx_gps); p_gps_abajo_u(idx_gps)];
             y_innov = z_gps - H * x_pred;
             S = H * P_pred * H' + R;
             K = P_pred * H' / S;
-            
+
             x_est = x_pred + K * y_innov;
-            P = (I_9 - K * H) * P_pred * (I_9 - K * H)' + K * R * K'; 
-            
+            P = (I_9 - K * H) * P_pred * (I_9 - K * H)' + K * R * K';
+
             x_pred = x_est;
             P_pred = P;
-            idx_gps = idx_gps + 1; 
+            idx_gps = idx_gps + 1;
         end
+
         hist_pos(:, k) = x_est(1:3);
     end
-    
-    % --- 4. CÁLCULO DE ERROR DE ESTE CASO ---
+
+    % --- 4. CÁLCULO DE ERROR ---
     error_distancia = zeros(num_muestras, 1);
     for i = 1:num_muestras
         distancias = sqrt((P_gt_transpuesta(1,:) - hist_pos(1,i)).^2 + ...
@@ -514,11 +542,10 @@ for caso = 1:3
                           (P_gt_transpuesta(3,:) - hist_pos(3,i)).^2);
         error_distancia(i) = min(distancias);
     end
-    
+
     historiales_pos{caso} = hist_pos;
     rmses_ekf(caso) = sqrt(mean(error_distancia.^2));
 end
-
 % =========================================================================
 % 9. REPRESENTACIÓN GRÁFICA MULTI-ESCENARIO
 % =========================================================================
@@ -1063,7 +1090,7 @@ grid on; xlabel('Tiempo (s)'); ylabel('Incertidumbre Z (m)');
 fprintf('Gráfica 3-Sigma generada. Revisa la estabilidad del "tubo".\n');
 
 % =========================================================================
-% 18. CONVERGENCIA INICIAL DE LA COVARIANZA (TRANSIENTE DEL EKF)
+% 18. CONVERGENCIA DE LA POSICIÓN
 % =========================================================================
 fprintf('\nGenerando gráfica de convergencia inicial de la covarianza...\n');
 
@@ -1090,10 +1117,56 @@ legend('Location', 'northeast');
 
 % Hacemos zoom dinámico en los primeros 150 segundos para ver el "desplome"
 % Puedes ajustar este valor si ves que tarda más o menos en aplanarse
-xlim([0, min(150, t_plot(end))]);
-ylim([0, max([sigma_x(1), sigma_y(1), sigma_z(1)]) * 1.1]);
+% xlim([0, min(150, t_plot(end))]);
+% ylim([0, max([sigma_x(1), sigma_y(1), sigma_z(1)]) * 1.1]);
 
 fprintf('Gráfica de convergencia inicial generada.\n');
+
+% =========================================================================
+% CONVERGENCIA DE LA COVARIANZA: VELOCIDAD
+% =========================================================================
+fprintf('Generando gráfica de convergencia de covarianza (Velocidad)...\n');
+
+% Extraemos la desviación estándar (1-sigma) para la velocidad
+sigma_vx = sqrt(hist_P(4, :));
+sigma_vy = sqrt(hist_P(5, :));
+sigma_vz = sqrt(hist_P(6, :));
+
+figure('Name', 'Convergencia EKF - Velocidad', 'Color', 'w', 'Units', 'normalized', 'Position', [0.15, 0.25, 0.7, 0.5]);
+plot(t_plot, sigma_vx, 'b-', 'LineWidth', 2, 'DisplayName', '\sigma_{Vx} (Norte)'); hold on;
+plot(t_plot, sigma_vy, 'r-', 'LineWidth', 2, 'DisplayName', '\sigma_{Vy} (Este)');
+plot(t_plot, sigma_vz, 'g-', 'LineWidth', 2, 'DisplayName', '\sigma_{Vz} (Abajo)');
+
+grid on;
+set(gca, 'FontSize', 11);
+xlabel('Tiempo de vuelo (s)', 'FontWeight', 'bold');
+ylabel('Incertidumbre 1-\sigma (m/s)', 'FontWeight', 'bold');
+title('Fase Transitoria: Convergencia de la Covarianza (Velocidad)', 'FontWeight', 'bold');
+legend('Location', 'northeast');
+% xlim([0, min(150, t_plot(end))]);
+
+% =========================================================================
+% CONVERGENCIA DE LA COVARIANZA: ORIENTACIÓN (ACTITUD)
+% =========================================================================
+fprintf('Generando gráfica de convergencia de covarianza (Orientación)...\n');
+
+% Extraemos la desviación y pasamos a grados para mayor claridad en la memoria
+sigma_roll  = sqrt(hist_P(7, :)) * (180/pi);
+sigma_pitch = sqrt(hist_P(8, :)) * (180/pi);
+sigma_yaw   = sqrt(hist_P(9, :)) * (180/pi);
+
+figure('Name', 'Convergencia EKF - Orientación', 'Color', 'w', 'Units', 'normalized', 'Position', [0.15, 0.25, 0.7, 0.5]);
+plot(t_plot, sigma_roll, 'b-', 'LineWidth', 2, 'DisplayName', '\sigma_{Roll} (Alabeo)'); hold on;
+plot(t_plot, sigma_pitch, 'r-', 'LineWidth', 2, 'DisplayName', '\sigma_{Pitch} (Cabeceo)');
+plot(t_plot, sigma_yaw, 'g-', 'LineWidth', 2, 'DisplayName', '\sigma_{Yaw} (Rumbo)');
+
+grid on;
+set(gca, 'FontSize', 11);
+xlabel('Tiempo de vuelo (s)', 'FontWeight', 'bold');
+ylabel('Incertidumbre 1-\sigma (grados)', 'FontWeight', 'bold');
+title('Fase Transitoria: Convergencia de la Covarianza (Orientación)', 'FontWeight', 'bold');
+legend('Location', 'northeast');
+% xlim([0, min(150, t_plot(end))]);
 
 
 %% =========================================================================
